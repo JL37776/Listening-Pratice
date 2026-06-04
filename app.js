@@ -406,6 +406,7 @@ async function speakWithKokoro(text, onEnd) {
   if (!blob) {
     setEngineStatus("Generating audio...");
     const audio = await tts.generate(text, { voice, speed });
+    alert("generate done");
     blob = audio.toBlob();
     audioCache.set(cacheKey, blob);
     if (audioCache.size > 24) {
