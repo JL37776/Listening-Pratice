@@ -279,11 +279,53 @@ function setEngineStatus(message = "") {
   $("#engineStatus").textContent = state.engine === "system" ? "System Speech" : "Kokoro TTS";
 }
 
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function isAndroid() {
+  return /Android/i.test(navigator.userAgent);
+}
+
 function getKokoroRuntimeOptions() {
   const requestedDevice = state.kokoroDevice || "auto";
-  const device = requestedDevice === "auto" ? (navigator.gpu ? "webgpu" : "wasm") : requestedDevice;
+
+  // Auto
+  if (requestedDevice === "auto") {
+
+    // iPhone / iPad
+    if (isIOS()) {
+      return {
+        device: "wasm",
+        dtype: "q8"
+      };
+    }
+
+    // Android
+    if (isAndroid()) {
+      return {
+        device: "wasm",
+        dtype: "q8"
+      };
+    }
+
+    // Desktop
+    return {
+      device: navigator.gpu ? "webgpu" : "wasm",
+      dtype: navigator.gpu ? "fp32" : "q8"
+    };
+  }
+
+  const device = requestedDevice;
+
   const requestedDtype = state.kokoroDtype || "auto";
-  const dtype = requestedDtype === "auto" ? (device === "webgpu" ? "fp32" : "q8") : requestedDtype;
+
+  const dtype =
+    requestedDtype === "auto"
+      ? (device === "webgpu" ? "fp32" : "q8")
+      : requestedDtype;
+
   return { device, dtype };
 }
 
@@ -307,7 +349,9 @@ async function loadKokoro() {
   if (kokoroTts && kokoroConfigKey === key) return kokoroTts;
 
   const { device, dtype } = getKokoroRuntimeOptions();
-  setEngineStatus(`Loading Kokoro (${device}, ${dtype})`);
+setEngineStatus(
+  `Loading Kokoro (${device.toUpperCase()} ${dtype.toUpperCase()})`
+);
   try {
     kokoroTts = await KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
       device,
