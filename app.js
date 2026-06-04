@@ -288,34 +288,36 @@ function isAndroid() {
   return /Android/i.test(navigator.userAgent);
 }
 
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent)
+      || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+
 function getKokoroRuntimeOptions() {
-  const requestedDevice = state.kokoroDevice || "auto";
 
-  // Auto
-  if (requestedDevice === "auto") {
-
-    // iPhone / iPad
-    if (isIOS()) {
-      return {
-        device: "wasm",
-        dtype: "q8"
-      };
-    }
-
-    // Android
-    if (isAndroid()) {
-      return {
-        device: "wasm",
-        dtype: "q8"
-      };
-    }
-
-    // Desktop
+  // iOS force WASM
+  if (isIOS()) {
     return {
-      device: navigator.gpu ? "webgpu" : "wasm",
-      dtype: navigator.gpu ? "fp32" : "q8"
+      device: "wasm",
+      dtype: "q8"
     };
   }
+
+  const requestedDevice = state.kokoroDevice || "auto";
+
+  const device = requestedDevice === "auto"
+    ? (navigator.gpu ? "webgpu" : "wasm")
+    : requestedDevice;
+
+  const requestedDtype = state.kokoroDtype || "auto";
+
+  const dtype = requestedDtype === "auto"
+    ? (device === "webgpu" ? "fp32" : "q8")
+    : requestedDtype;
+
+  return { device, dtype };
+}
 
   const device = requestedDevice;
 
