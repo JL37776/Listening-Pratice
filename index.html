@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f7faf9" />
+    <title>Listening Practice</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="top-bar">
+        <button class="icon-button" id="openLibrary" aria-label="打开项目">
+          <span aria-hidden="true">▦</span>
+        </button>
+        <div>
+          <p class="eyebrow">H5 System Speech</p>
+          <h1>Listening Practice</h1>
+        </div>
+        <button class="icon-button primary" id="quickAdd" aria-label="新建句子">
+          <span aria-hidden="true">＋</span>
+        </button>
+      </header>
+
+      <section class="project-strip">
+        <button class="project-pill" id="projectPicker">
+          <span id="currentFolderName">Daily English</span>
+          <span aria-hidden="true">/</span>
+          <strong id="currentProjectName">Morning Practice</strong>
+          <span aria-hidden="true">⌄</span>
+        </button>
+        <span class="speech-pill" id="speechStatus">System Voice</span>
+      </section>
+
+      <section class="practice-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Practice Sentences</p>
+            <h2>Practice Sentences</h2>
+          </div>
+          <button class="text-button" id="addSentence">Add</button>
+        </div>
+        <div class="sentence-list" id="sentenceList"></div>
+      </section>
+
+      <section class="player-panel" aria-label="朗读控制">
+        <div class="mode-tabs" role="tablist" aria-label="练习模式">
+          <button class="active" data-mode="single">Single</button>
+          <button data-mode="continuous">Loop</button>
+          <button data-mode="dictation">Dictation</button>
+        </div>
+
+        <div class="now-playing">
+          <button class="play-button" id="playPause" aria-label="Play or pause">
+            <span id="playIcon">▶</span>
+          </button>
+          <div class="now-copy">
+            <p id="nowTitle">Ready</p>
+            <small id="nowSubtitle">Select a sentence, then press play</small>
+          </div>
+        </div>
+
+        <div class="progress-track" aria-hidden="true">
+          <span id="progressFill"></span>
+        </div>
+
+        <div class="transport-row">
+          <button class="small-control" id="prevSentence" aria-label="Previous sentence">‹</button>
+          <label>
+            <span>Repeat</span>
+            <input id="repeatCount" type="number" min="1" max="9" value="3" />
+          </label>
+          <label>
+            <span>Speed</span>
+            <input id="rateRange" type="range" min="0.5" max="1.5" step="0.1" value="0.9" />
+            <b id="rateLabel">0.9x</b>
+          </label>
+          <button class="small-control" id="nextSentence" aria-label="Next sentence">›</button>
+        </div>
+
+        <label class="voice-row">
+          <span>Voice</span>
+          <select id="voiceSelect">
+            <option value="">System Default</option>
+          </select>
+        </label>
+      </section>
+
+      <form class="composer" id="sentenceForm">
+        <input id="sentenceInput" autocomplete="off" placeholder="Type a new sentence..." />
+        <button type="button" class="icon-button" id="pasteSentence" aria-label="Paste">□</button>
+        <button type="submit" class="send-button">Save</button>
+      </form>
+
+      <nav class="tab-bar" aria-label="底部导航">
+        <button id="projectsTab">
+          <span aria-hidden="true">▣</span>
+          Projects
+        </button>
+        <button class="active">
+          <span aria-hidden="true">▶</span>
+          Practice
+        </button>
+        <button id="recordsTab">
+          <span aria-hidden="true">✓</span>
+          Records
+        </button>
+        <button id="settingsTab">
+          <span aria-hidden="true">⚙</span>
+          Settings
+        </button>
+      </nav>
+    </main>
+
+    <dialog class="sheet" id="libraryDialog">
+      <form method="dialog" class="sheet-inner">
+        <div class="sheet-head">
+          <h2>Project Library</h2>
+          <button class="icon-button" value="cancel" aria-label="Close">×</button>
+        </div>
+        <div class="library-actions">
+          <button type="button" id="createFolder">New Folder</button>
+          <button type="button" id="createProject">New Project</button>
+        </div>
+        <div id="folderList" class="folder-list"></div>
+      </form>
+    </dialog>
+
+    <dialog class="sheet" id="editDialog">
+      <form method="dialog" class="sheet-inner" id="editForm">
+        <div class="sheet-head">
+          <h2 id="editTitle">Edit Sentence</h2>
+          <button class="icon-button" value="cancel" aria-label="Close">×</button>
+        </div>
+        <label class="stacked-field">
+          <span>Sentence</span>
+          <textarea id="editText" rows="4" required></textarea>
+        </label>
+        <label class="stacked-field">
+          <span>Note</span>
+          <textarea id="editNote" rows="3"></textarea>
+        </label>
+        <div class="dialog-actions">
+          <button type="button" class="danger" id="deleteSentence">Delete</button>
+          <button type="submit" class="send-button">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "Listening Practice",
+  "short_name": "Listen",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f7faf9",
+  "theme_color": "#f7faf9",
+  "description": "A pure H5 tool for practicing custom sentences with system speech."
+}
