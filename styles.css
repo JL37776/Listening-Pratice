@@ -8,9 +8,8 @@
   --muted: #6b7773;
   --teal: #087f74;
   --teal-soft: #dff3ef;
-  --amber: #e2a528;
   --danger: #c94b4b;
-  --shadow: 0 16px 36px rgba(18, 36, 32, 0.1);
+  --shadow: 0 14px 30px rgba(18, 36, 32, 0.08);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -41,17 +40,21 @@ button {
   width: min(100%, 430px);
   min-height: 100vh;
   margin: 0 auto;
-  padding: max(14px, env(safe-area-inset-top)) 14px calc(96px + env(safe-area-inset-bottom));
+  padding: max(14px, env(safe-area-inset-top)) 14px calc(74px + env(safe-area-inset-bottom));
 }
 
 .top-bar,
-.project-strip,
 .section-heading,
 .now-playing,
 .transport-row,
+.settings-grid,
 .voice-row,
 .sheet-head,
-.dialog-actions {
+.dialog-actions,
+.folder-title-row,
+.project-row,
+.library-mini-actions,
+.project-actions {
   display: flex;
   align-items: center;
 }
@@ -59,7 +62,7 @@ button {
 .top-bar {
   justify-content: space-between;
   gap: 12px;
-  padding: 4px 0 12px;
+  padding-bottom: 12px;
 }
 
 .top-bar h1,
@@ -70,7 +73,7 @@ button {
 }
 
 .top-bar h1 {
-  font-size: 24px;
+  font-size: 23px;
   line-height: 1.15;
 }
 
@@ -81,12 +84,14 @@ button {
 }
 
 .icon-button,
-.small-control {
+.small-control,
+.mini-button {
   display: grid;
   place-items: center;
-  width: 42px;
+  min-width: 42px;
   height: 42px;
   border-radius: 8px;
+  padding: 0 10px;
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--line);
@@ -100,44 +105,27 @@ button {
   border-color: var(--teal);
 }
 
-.project-strip {
-  gap: 8px;
+.project-pill {
+  display: flex;
+  width: 100%;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   margin-bottom: 12px;
-}
-
-.project-pill,
-.speech-pill {
-  height: 36px;
+  padding: 0 12px;
   border-radius: 8px;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--text);
 }
 
-.project-pill {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 10px;
-  min-width: 0;
-}
-
 .project-pill span,
 .project-pill strong {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.speech-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 10px;
-  color: var(--teal);
-  background: var(--teal-soft);
-  font-size: 13px;
 }
 
 .practice-card,
@@ -154,6 +142,7 @@ button {
 
 .section-heading {
   justify-content: space-between;
+  gap: 10px;
   margin-bottom: 10px;
 }
 
@@ -175,7 +164,7 @@ button {
 
 .sentence-row {
   display: grid;
-  grid-template-columns: 20px 1fr auto;
+  grid-template-columns: 1fr auto;
   gap: 10px;
   align-items: center;
   padding: 12px;
@@ -184,14 +173,21 @@ button {
   background: #fbfdfc;
 }
 
+.sentence-row.empty {
+  display: block;
+}
+
 .sentence-row.selected {
   border-color: var(--teal);
   background: #f0fbf8;
 }
 
-.drag {
-  color: var(--muted);
-  line-height: 1;
+.sentence-copy {
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  background: transparent;
+  color: var(--text);
 }
 
 .sentence-text {
@@ -213,57 +209,26 @@ button {
 }
 
 .mini-button {
-  width: 34px;
   height: 34px;
-  border-radius: 8px;
+  min-width: 44px;
+  font-size: 12px;
   background: var(--surface-2);
-  color: var(--text);
-}
-
-.mini-button.done {
-  color: var(--teal);
 }
 
 .player-panel {
-  position: sticky;
-  bottom: 94px;
-  z-index: 2;
   margin-top: 12px;
   padding: 12px;
 }
 
-.mode-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  padding: 4px;
-  border-radius: 8px;
-  background: var(--surface-2);
-}
-
-.mode-tabs button {
-  height: 34px;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--muted);
-}
-
-.mode-tabs button.active {
-  background: var(--surface);
-  color: var(--teal);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
-}
-
 .now-playing {
   gap: 12px;
-  margin: 14px 0 10px;
 }
 
 .play-button {
-  width: 54px;
+  width: 58px;
   height: 54px;
   border-radius: 8px;
-  font-size: 22px;
+  flex: 0 0 auto;
 }
 
 .now-copy {
@@ -287,53 +252,46 @@ button {
   color: var(--muted);
 }
 
-.progress-track {
-  height: 7px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  overflow: hidden;
-}
-
-.progress-track span {
-  display: block;
-  width: 0%;
-  height: 100%;
-  background: var(--amber);
-  transition: width 0.2s ease;
-}
-
 .transport-row {
   gap: 8px;
   margin-top: 12px;
 }
 
-.transport-row label {
+.small-control {
+  flex: 1;
+  background: var(--surface-2);
+}
+
+.settings-grid {
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.settings-grid label {
   flex: 1;
   min-width: 0;
   display: grid;
-  grid-template-columns: auto 1fr auto;
   gap: 6px;
-  align-items: center;
   color: var(--muted);
   font-size: 12px;
 }
 
-.transport-row input[type="number"] {
-  width: 46px;
-  height: 34px;
-  text-align: center;
+.settings-grid input[type="number"] {
+  width: 100%;
+  height: 38px;
   border-radius: 8px;
   border: 1px solid var(--line);
+  padding: 0 10px;
 }
 
-.transport-row input[type="range"] {
-  min-width: 70px;
+.settings-grid input[type="range"] {
+  width: 100%;
   accent-color: var(--teal);
 }
 
 .voice-row {
   gap: 10px;
-  margin-top: 10px;
+  margin-top: 12px;
   color: var(--muted);
   font-size: 13px;
 }
@@ -348,24 +306,20 @@ button {
   color: var(--text);
 }
 
-.composer,
-.tab-bar {
+.composer {
   position: fixed;
   left: 50%;
+  bottom: 0;
   z-index: 3;
-  width: min(100%, 430px);
-  transform: translateX(-50%);
-  background: rgba(247, 250, 249, 0.92);
-  backdrop-filter: blur(16px);
-}
-
-.composer {
-  bottom: calc(58px + env(safe-area-inset-bottom));
   display: grid;
-  grid-template-columns: 1fr 42px auto;
+  grid-template-columns: 1fr auto;
   gap: 8px;
-  padding: 10px 14px;
+  width: min(100%, 430px);
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
+  background: rgba(247, 250, 249, 0.94);
+  backdrop-filter: blur(16px);
+  transform: translateX(-50%);
 }
 
 .composer input {
@@ -382,30 +336,6 @@ button {
   height: 42px;
   border-radius: 8px;
   padding: 0 12px;
-}
-
-.tab-bar {
-  bottom: 0;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--line);
-}
-
-.tab-bar button {
-  display: grid;
-  gap: 3px;
-  place-items: center;
-  height: 48px;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.tab-bar button.active {
-  color: var(--teal);
-  background: var(--teal-soft);
 }
 
 .sheet {
@@ -455,14 +385,6 @@ button {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
-}
-
-.folder-title-row,
-.project-row,
-.library-mini-actions,
-.project-actions {
-  display: flex;
-  align-items: center;
 }
 
 .folder-title-row,

@@ -7,8 +7,8 @@ A pure H5 listening practice tool. Users can create folders and projects, edit t
 - Folder and project management
 - Add, edit, and delete practice sentences
 - Local browser storage
-- Single, loop, and dictation modes
 - Repeat count, speed, and system voice selection
+- Previous and next sentence controls
 - iPhone Safari system speech support
 
 ## Local Preview

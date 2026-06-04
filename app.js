@@ -1,10 +1,9 @@
-const STORAGE_KEY = "listening-practice-state-v1";
+const STORAGE_KEY = "listening-practice-state-v2";
 
 const defaultState = {
   activeFolderId: "daily",
   activeProjectId: "morning",
   activeSentenceId: "s1",
-  mode: "single",
   repeatCount: 3,
   rate: 0.9,
   voiceURI: "",
@@ -21,37 +20,16 @@ const defaultState = {
               id: "s1",
               text: "I want to improve my listening every day.",
               note: "Daily listening routine.",
-              done: false,
             },
             {
               id: "s2",
               text: "Could you speak a little more slowly?",
               note: "Useful question for real conversations.",
-              done: false,
             },
             {
               id: "s3",
               text: "I will review these sentences before going to bed.",
               note: "Review before bed.",
-              done: false,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      id: "ielts",
-      name: "IELTS",
-      projects: [
-        {
-          id: "part-two",
-          name: "Part 2",
-          sentences: [
-            {
-              id: "s4",
-              text: "The speaker describes a memorable journey in detail.",
-              note: "Listen for keywords and tense.",
-              done: false,
             },
           ],
         },
@@ -62,10 +40,8 @@ const defaultState = {
 
 let state = loadState();
 let voices = [];
-let currentUtterance = null;
 let isSpeaking = false;
 let editSentenceId = null;
-let progressTimer = null;
 
 const $ = (selector) => document.querySelector(selector);
 const sentenceList = $("#sentenceList");
@@ -83,6 +59,10 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function uid(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
 function ensureState() {
@@ -113,10 +93,6 @@ function ensureState() {
   }
 }
 
-function uid(prefix) {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
 function activeFolder() {
   return state.folders.find((folder) => folder.id === state.activeFolderId) || state.folders[0];
 }
@@ -133,18 +109,15 @@ function activeSentence() {
 
 function render() {
   ensureState();
-  const folder = activeFolder();
-  const project = activeProject();
-  $("#currentFolderName").textContent = folder.name;
-  $("#currentProjectName").textContent = project.name;
+  $("#currentFolderName").textContent = activeFolder().name;
+  $("#currentProjectName").textContent = activeProject().name;
   $("#repeatCount").value = state.repeatCount;
   $("#rateRange").value = state.rate;
   $("#rateLabel").textContent = `${Number(state.rate).toFixed(1)}x`;
-  $("#speechStatus").textContent = "System Voice";
   renderSentences();
   renderLibrary();
   renderNowPlaying();
-  updateModeTabs();
+  saveState();
 }
 
 function renderSentences() {
@@ -153,14 +126,12 @@ function renderSentences() {
 
   if (!project.sentences.length) {
     const empty = document.createElement("article");
-    empty.className = "sentence-row";
+    empty.className = "sentence-row empty";
     empty.innerHTML = `
-      <span class="drag">＋</span>
       <div>
         <p class="sentence-text">No sentences yet</p>
-        <p class="sentence-note">Add your first sentence from the input below.</p>
+        <p class="sentence-note">Add your first sentence below.</p>
       </div>
-      <div class="row-actions"></div>
     `;
     sentenceList.append(empty);
     return;
@@ -170,15 +141,13 @@ function renderSentences() {
     const row = document.createElement("article");
     row.className = `sentence-row${sentence.id === state.activeSentenceId ? " selected" : ""}`;
     row.innerHTML = `
-      <span class="drag">⋮⋮</span>
       <button class="sentence-copy" type="button">
         <p class="sentence-text"></p>
         <p class="sentence-note"></p>
       </button>
       <div class="row-actions">
-        <button class="mini-button play-one" type="button" aria-label="播放">▶</button>
-        <button class="mini-button edit-one" type="button" aria-label="编辑">✎</button>
-        <button class="mini-button done" type="button" aria-label="完成">${sentence.done ? "✓" : "○"}</button>
+        <button class="mini-button play-one" type="button" aria-label="Play sentence">Play</button>
+        <button class="mini-button edit-one" type="button" aria-label="Edit sentence">Edit</button>
       </div>
     `;
     row.querySelector(".sentence-text").textContent = sentence.text;
@@ -189,7 +158,6 @@ function renderSentences() {
       speakCurrent();
     });
     row.querySelector(".edit-one").addEventListener("click", () => openEdit(sentence.id));
-    row.querySelector(".done").addEventListener("click", () => toggleDone(sentence.id));
     sentenceList.append(row);
   });
 }
@@ -197,12 +165,13 @@ function renderSentences() {
 function renderLibrary() {
   const folderList = $("#folderList");
   folderList.innerHTML = "";
+
   state.folders.forEach((folder) => {
     const block = document.createElement("section");
     block.className = "folder-block";
     block.innerHTML = `
       <div class="folder-title-row">
-        <p class="folder-title">▦ ${folder.name}</p>
+        <p class="folder-title">${folder.name}</p>
         <div class="library-mini-actions">
           <button type="button" data-action="rename-folder">Rename</button>
           <button type="button" data-action="delete-folder">Delete</button>
@@ -219,12 +188,11 @@ function renderLibrary() {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "project-button";
-      button.textContent = `${project.name} · ${project.sentences.length} sentences`;
+      button.textContent = `${project.name} - ${project.sentences.length} sentences`;
       button.addEventListener("click", () => {
         state.activeFolderId = folder.id;
         state.activeProjectId = project.id;
         state.activeSentenceId = project.sentences[0]?.id || "";
-        saveState();
         render();
         libraryDialog.close();
       });
@@ -232,8 +200,8 @@ function renderLibrary() {
       const actions = document.createElement("div");
       actions.className = "project-actions";
       actions.innerHTML = `
-        <button type="button" aria-label="Rename project">✎</button>
-        <button type="button" aria-label="Delete project">×</button>
+        <button type="button" aria-label="Rename project">Edit</button>
+        <button type="button" aria-label="Delete project">Delete</button>
       `;
       actions.children[0].addEventListener("click", () => renameProject(folder.id, project.id));
       actions.children[1].addEventListener("click", () => deleteProject(folder.id, project.id));
@@ -248,18 +216,11 @@ function renderLibrary() {
 function renderNowPlaying() {
   const sentence = activeSentence();
   $("#nowTitle").textContent = sentence ? sentence.text : "Ready";
-  $("#nowSubtitle").textContent = sentence ? sentence.note || "Press play to use system speech" : "Add a sentence to start practicing";
-}
-
-function updateModeTabs() {
-  document.querySelectorAll(".mode-tabs button").forEach((button) => {
-    button.classList.toggle("active", button.dataset.mode === state.mode);
-  });
+  $("#nowSubtitle").textContent = sentence ? sentence.note || "Press play to use system speech." : "Add a sentence to start.";
 }
 
 function selectSentence(id) {
   state.activeSentenceId = id;
-  saveState();
   render();
 }
 
@@ -280,15 +241,11 @@ function speakText(text, onEnd) {
   utterance.lang = selectedVoice()?.lang || "en-US";
   utterance.onstart = () => {
     isSpeaking = true;
-    currentUtterance = utterance;
-    $("#playIcon").textContent = "Ⅱ";
-    startProgress();
+    $("#playIcon").textContent = "Stop";
   };
   utterance.onend = () => {
     isSpeaking = false;
-    currentUtterance = null;
-    $("#playIcon").textContent = "▶";
-    stopProgress(true);
+    $("#playIcon").textContent = "Play";
     if (onEnd) onEnd();
   };
   utterance.onerror = utterance.onend;
@@ -298,6 +255,8 @@ function speakText(text, onEnd) {
 function speakCurrent() {
   if (isSpeaking) {
     window.speechSynthesis.cancel();
+    isSpeaking = false;
+    $("#playIcon").textContent = "Play";
     return;
   }
 
@@ -308,61 +267,35 @@ function speakCurrent() {
   let count = 0;
   const playNextRepeat = () => {
     count += 1;
-    if (count <= repeat) {
-      speakText(sentence.text, playNextRepeat);
-    } else if (state.mode === "continuous") {
-      moveSentence(1, true);
-      speakCurrent();
-    }
+    if (count <= repeat) speakText(sentence.text, playNextRepeat);
   };
   playNextRepeat();
 }
 
-function startProgress() {
-  stopProgress(false);
-  const started = Date.now();
-  progressTimer = window.setInterval(() => {
-    const progress = Math.min(92, ((Date.now() - started) / 3500) * 100);
-    $("#progressFill").style.width = `${progress}%`;
-  }, 120);
-}
-
-function stopProgress(complete) {
-  if (progressTimer) window.clearInterval(progressTimer);
-  progressTimer = null;
-  $("#progressFill").style.width = complete ? "100%" : "0%";
-  if (complete) {
-    window.setTimeout(() => {
-      if (!isSpeaking) $("#progressFill").style.width = "0%";
-    }, 500);
-  }
-}
-
-function moveSentence(direction, silent = false) {
+function moveSentence(direction) {
   const project = activeProject();
   if (!project.sentences.length) return;
   const currentIndex = project.sentences.findIndex((sentence) => sentence.id === state.activeSentenceId);
   const nextIndex = (currentIndex + direction + project.sentences.length) % project.sentences.length;
   state.activeSentenceId = project.sentences[nextIndex].id;
-  saveState();
+  window.speechSynthesis?.cancel();
+  isSpeaking = false;
+  $("#playIcon").textContent = "Play";
   render();
-  if (!silent) window.speechSynthesis?.cancel();
 }
 
 function addSentence(text) {
   const value = text.trim();
   if (!value) return;
   const project = activeProject();
-  const sentence = { id: uid("sentence"), text: value, note: "", done: false };
+  const sentence = { id: uid("sentence"), text: value, note: "" };
   project.sentences.push(sentence);
   state.activeSentenceId = sentence.id;
-  saveState();
   render();
 }
 
 function openEdit(id) {
-  const project = activeProject();
-  const sentence = project.sentences.find((item) => item.id === id);
+  const sentence = activeProject().sentences.find((item) => item.id === id);
   if (!sentence) return;
   editSentenceId = id;
   $("#editText").value = sentence.text;
@@ -379,14 +312,6 @@ function openNewSentence() {
   editDialog.showModal();
 }
 
-function toggleDone(id) {
-  const sentence = activeProject().sentences.find((item) => item.id === id);
-  if (!sentence) return;
-  sentence.done = !sentence.done;
-  saveState();
-  render();
-}
-
 function populateVoices() {
   voices = window.speechSynthesis?.getVoices?.() || [];
   const select = $("#voiceSelect");
@@ -395,10 +320,56 @@ function populateVoices() {
   voices.forEach((voice) => {
     const option = document.createElement("option");
     option.value = voice.voiceURI;
-    option.textContent = `${voice.name} · ${voice.lang}`;
+    option.textContent = `${voice.name} - ${voice.lang}`;
     select.append(option);
   });
   select.value = voices.some((voice) => voice.voiceURI === current) ? current : "";
+}
+
+function renameFolder(folderId) {
+  const folder = state.folders.find((item) => item.id === folderId);
+  if (!folder) return;
+  const name = prompt("Folder name", folder.name);
+  if (!name?.trim()) return;
+  folder.name = name.trim();
+  render();
+}
+
+function deleteFolder(folderId) {
+  const folder = state.folders.find((item) => item.id === folderId);
+  if (!folder) return;
+  if (!confirm(`Delete folder "${folder.name}" and all projects inside it?`)) return;
+  state.folders = state.folders.filter((item) => item.id !== folderId);
+  if (state.activeFolderId === folderId) {
+    state.activeFolderId = state.folders[0]?.id || "";
+    state.activeProjectId = "";
+    state.activeSentenceId = "";
+  }
+  render();
+}
+
+function renameProject(folderId, projectId) {
+  const folder = state.folders.find((item) => item.id === folderId);
+  const project = folder?.projects.find((item) => item.id === projectId);
+  if (!project) return;
+  const name = prompt("Project name", project.name);
+  if (!name?.trim()) return;
+  project.name = name.trim();
+  render();
+}
+
+function deleteProject(folderId, projectId) {
+  const folder = state.folders.find((item) => item.id === folderId);
+  const project = folder?.projects.find((item) => item.id === projectId);
+  if (!folder || !project) return;
+  if (!confirm(`Delete project "${project.name}" and all sentences inside it?`)) return;
+  folder.projects = folder.projects.filter((item) => item.id !== projectId);
+  if (state.activeProjectId === projectId) {
+    state.activeFolderId = folder.id;
+    state.activeProjectId = folder.projects[0]?.id || "";
+    state.activeSentenceId = "";
+  }
+  render();
 }
 
 $("#openLibrary").addEventListener("click", () => libraryDialog.showModal());
@@ -416,18 +387,8 @@ $("#sentenceForm").addEventListener("submit", (event) => {
   input.value = "";
 });
 
-$("#pasteSentence").addEventListener("click", async () => {
-  try {
-    const text = await navigator.clipboard.readText();
-    $("#sentenceInput").value = text;
-  } catch {
-    $("#sentenceInput").focus();
-  }
-});
-
 $("#repeatCount").addEventListener("change", (event) => {
   state.repeatCount = Math.min(9, Math.max(1, Number(event.target.value) || 1));
-  saveState();
   render();
 });
 
@@ -442,14 +403,6 @@ $("#voiceSelect").addEventListener("change", (event) => {
   saveState();
 });
 
-document.querySelectorAll(".mode-tabs button").forEach((button) => {
-  button.addEventListener("click", () => {
-    state.mode = button.dataset.mode;
-    saveState();
-    updateModeTabs();
-  });
-});
-
 $("#createFolder").addEventListener("click", () => {
   const name = prompt("Folder name");
   if (!name?.trim()) return;
@@ -458,73 +411,18 @@ $("#createFolder").addEventListener("click", () => {
   state.activeFolderId = folder.id;
   state.activeProjectId = "";
   state.activeSentenceId = "";
-  saveState();
   render();
 });
 
 $("#createProject").addEventListener("click", () => {
-  const folder = activeFolder();
   const name = prompt("Project name");
   if (!name?.trim()) return;
   const project = { id: uid("project"), name: name.trim(), sentences: [] };
-  folder.projects.push(project);
+  activeFolder().projects.push(project);
   state.activeProjectId = project.id;
   state.activeSentenceId = "";
-  saveState();
   render();
 });
-
-function renameFolder(folderId) {
-  const folder = state.folders.find((item) => item.id === folderId);
-  if (!folder) return;
-  const name = prompt("Folder name", folder.name);
-  if (!name?.trim()) return;
-  folder.name = name.trim();
-  saveState();
-  render();
-}
-
-function deleteFolder(folderId) {
-  const folder = state.folders.find((item) => item.id === folderId);
-  if (!folder) return;
-  const message = `Delete folder "${folder.name}" and all projects inside it?`;
-  if (!confirm(message)) return;
-  state.folders = state.folders.filter((item) => item.id !== folderId);
-  if (state.activeFolderId === folderId) {
-    state.activeFolderId = state.folders[0]?.id || "";
-    state.activeProjectId = "";
-    state.activeSentenceId = "";
-  }
-  saveState();
-  render();
-}
-
-function renameProject(folderId, projectId) {
-  const folder = state.folders.find((item) => item.id === folderId);
-  const project = folder?.projects.find((item) => item.id === projectId);
-  if (!project) return;
-  const name = prompt("Project name", project.name);
-  if (!name?.trim()) return;
-  project.name = name.trim();
-  saveState();
-  render();
-}
-
-function deleteProject(folderId, projectId) {
-  const folder = state.folders.find((item) => item.id === folderId);
-  const project = folder?.projects.find((item) => item.id === projectId);
-  if (!folder || !project) return;
-  const message = `Delete project "${project.name}" and all sentences inside it?`;
-  if (!confirm(message)) return;
-  folder.projects = folder.projects.filter((item) => item.id !== projectId);
-  if (state.activeProjectId === projectId) {
-    state.activeFolderId = folder.id;
-    state.activeProjectId = folder.projects[0]?.id || "";
-    state.activeSentenceId = "";
-  }
-  saveState();
-  render();
-}
 
 $("#editForm").addEventListener("submit", (event) => {
   event.preventDefault();
@@ -532,6 +430,7 @@ $("#editForm").addEventListener("submit", (event) => {
   if (!text) return;
   const note = $("#editNote").value.trim();
   const project = activeProject();
+
   if (editSentenceId) {
     const sentence = project.sentences.find((item) => item.id === editSentenceId);
     if (sentence) {
@@ -540,11 +439,11 @@ $("#editForm").addEventListener("submit", (event) => {
       state.activeSentenceId = sentence.id;
     }
   } else {
-    const sentence = { id: uid("sentence"), text, note, done: false };
+    const sentence = { id: uid("sentence"), text, note };
     project.sentences.push(sentence);
     state.activeSentenceId = sentence.id;
   }
-  saveState();
+
   render();
   editDialog.close();
 });
@@ -554,20 +453,13 @@ $("#deleteSentence").addEventListener("click", () => {
   const project = activeProject();
   project.sentences = project.sentences.filter((sentence) => sentence.id !== editSentenceId);
   state.activeSentenceId = project.sentences[0]?.id || "";
-  saveState();
   render();
   editDialog.close();
 });
 
-$("#projectsTab").addEventListener("click", () => libraryDialog.showModal());
-$("#recordsTab").addEventListener("click", () => alert("Practice records are saved in this browser. A stats page can be added later."));
-$("#settingsTab").addEventListener("click", () => alert("This app uses iOS/Safari system speech. Manage voices in your iPhone settings."));
-
 if ("speechSynthesis" in window) {
   populateVoices();
   window.speechSynthesis.onvoiceschanged = populateVoices;
-} else {
-  $("#speechStatus").textContent = "Speech Unavailable";
 }
 
 render();
