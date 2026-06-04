@@ -13,7 +13,7 @@
       <header class="top-bar">
         <button class="icon-button" id="openLibrary" aria-label="Open project library">Files</button>
         <div>
-          <p class="eyebrow">System Speech</p>
+          <p class="eyebrow" id="engineStatus">Kokoro TTS</p>
           <h1>Listening Practice</h1>
         </div>
         <button class="icon-button primary" id="quickAdd" aria-label="Add sentence">Add</button>
@@ -51,6 +51,26 @@
 
         <div class="settings-grid">
           <label>
+            <span>Engine</span>
+            <select id="engineSelect">
+              <option value="kokoro">Kokoro Local</option>
+              <option value="system">System Voice</option>
+            </select>
+          </label>
+          <label>
+            <span>Kokoro Voice</span>
+            <select id="kokoroVoiceSelect">
+              <option value="af_heart">Heart - US female</option>
+              <option value="af_bella">Bella - US female</option>
+              <option value="af_nicole">Nicole - US female</option>
+              <option value="af_sky">Sky - US female</option>
+              <option value="am_adam">Adam - US male</option>
+              <option value="am_michael">Michael - US male</option>
+              <option value="bf_emma">Emma - UK female</option>
+              <option value="bm_george">George - UK male</option>
+            </select>
+          </label>
+          <label>
             <span>Repeat</span>
             <input id="repeatCount" type="number" min="1" max="9" value="3" />
           </label>
@@ -59,11 +79,28 @@
             <input id="rateRange" type="range" min="0.5" max="1.5" step="0.1" value="0.9" />
             <b id="rateLabel">0.9x</b>
           </label>
+          <label>
+            <span>Device</span>
+            <select id="kokoroDeviceSelect">
+              <option value="auto">Auto</option>
+              <option value="webgpu">WebGPU</option>
+              <option value="wasm">WASM</option>
+            </select>
+          </label>
+          <label>
+            <span>Quality</span>
+            <select id="kokoroDtypeSelect">
+              <option value="auto">Auto</option>
+              <option value="fp32">Best</option>
+              <option value="q8">Balanced</option>
+              <option value="q4">Small</option>
+            </select>
+          </label>
         </div>
 
-        <label class="voice-row">
-          <span>Voice</span>
-          <select id="voiceSelect">
+        <label class="voice-row" id="systemVoiceRow">
+          <span>System Voice</span>
+          <select id="systemVoiceSelect">
             <option value="">System Default</option>
           </select>
         </label>
@@ -110,6 +147,6 @@
       </form>
     </dialog>
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>

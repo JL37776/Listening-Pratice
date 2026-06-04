@@ -7,9 +7,11 @@ A pure H5 listening practice tool. Users can create folders and projects, edit t
 - Folder and project management
 - Add, edit, and delete practice sentences
 - Local browser storage
-- Repeat count, speed, and system voice selection
+- Kokoro-82M local browser TTS
+- Voice, speed, device, and quality settings
+- System voice fallback
 - Previous and next sentence controls
-- iPhone Safari system speech support
+- iPhone Safari support
 
 ## Local Preview
 

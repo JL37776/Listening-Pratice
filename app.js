@@ -1,4 +1,8 @@
+import { KokoroTTS } from "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm";
+
 const STORAGE_KEY = "listening-practice-state-v2";
+const KOKORO_MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
+const DEFAULT_KOKORO_VOICE = "af_heart";
 
 const defaultState = {
   activeFolderId: "daily",
@@ -6,7 +10,11 @@ const defaultState = {
   activeSentenceId: "s1",
   repeatCount: 3,
   rate: 0.9,
-  voiceURI: "",
+  engine: "kokoro",
+  systemVoiceURI: "",
+  kokoroVoice: DEFAULT_KOKORO_VOICE,
+  kokoroDevice: "auto",
+  kokoroDtype: "auto",
   folders: [
     {
       id: "daily",
@@ -42,6 +50,11 @@ let state = loadState();
 let voices = [];
 let isSpeaking = false;
 let editSentenceId = null;
+let kokoroTts = null;
+let kokoroConfigKey = "";
+let activeAudio = null;
+let activeAudioUrl = "";
+const audioCache = new Map();
 
 const $ = (selector) => document.querySelector(selector);
 const sentenceList = $("#sentenceList");
@@ -66,6 +79,14 @@ function uid(prefix) {
 }
 
 function ensureState() {
+  state.engine ||= "kokoro";
+  state.systemVoiceURI ||= "";
+  state.kokoroVoice ||= DEFAULT_KOKORO_VOICE;
+  state.kokoroDevice ||= "auto";
+  state.kokoroDtype ||= "auto";
+  state.repeatCount = Math.min(9, Math.max(1, Number(state.repeatCount) || 3));
+  state.rate = Math.min(1.5, Math.max(0.5, Number(state.rate) || 0.9));
+
   if (!Array.isArray(state.folders) || !state.folders.length) {
     state.folders = [{ id: uid("folder"), name: "My Folder", projects: [] }];
   }
@@ -114,6 +135,12 @@ function render() {
   $("#repeatCount").value = state.repeatCount;
   $("#rateRange").value = state.rate;
   $("#rateLabel").textContent = `${Number(state.rate).toFixed(1)}x`;
+  $("#engineSelect").value = state.engine || "kokoro";
+  $("#kokoroVoiceSelect").value = state.kokoroVoice || DEFAULT_KOKORO_VOICE;
+  $("#kokoroDeviceSelect").value = state.kokoroDevice || "auto";
+  $("#kokoroDtypeSelect").value = state.kokoroDtype || "auto";
+  $("#systemVoiceRow").hidden = state.engine !== "system";
+  $("#engineStatus").textContent = state.engine === "system" ? "System Speech" : "Kokoro TTS";
   renderSentences();
   renderLibrary();
   renderNowPlaying();
@@ -216,7 +243,7 @@ function renderLibrary() {
 function renderNowPlaying() {
   const sentence = activeSentence();
   $("#nowTitle").textContent = sentence ? sentence.text : "Ready";
-  $("#nowSubtitle").textContent = sentence ? sentence.note || "Press play to use system speech." : "Add a sentence to start.";
+  $("#nowSubtitle").textContent = sentence ? sentence.note || "Press play to practice." : "Add a sentence to start.";
 }
 
 function selectSentence(id) {
@@ -225,10 +252,146 @@ function selectSentence(id) {
 }
 
 function selectedVoice() {
-  return voices.find((voice) => voice.voiceURI === state.voiceURI) || null;
+  return voices.find((voice) => voice.voiceURI === state.systemVoiceURI) || null;
 }
 
-function speakText(text, onEnd) {
+function stopPlayback() {
+  window.speechSynthesis?.cancel();
+  if (activeAudio) {
+    activeAudio.pause();
+    activeAudio.currentTime = 0;
+  }
+  if (activeAudioUrl) {
+    URL.revokeObjectURL(activeAudioUrl);
+  }
+  activeAudio = null;
+  activeAudioUrl = "";
+  isSpeaking = false;
+  $("#playIcon").textContent = "Play";
+  setEngineStatus();
+}
+
+function setEngineStatus(message = "") {
+  if (message) {
+    $("#engineStatus").textContent = message;
+    return;
+  }
+  $("#engineStatus").textContent = state.engine === "system" ? "System Speech" : "Kokoro TTS";
+}
+
+function getKokoroRuntimeOptions() {
+  const requestedDevice = state.kokoroDevice || "auto";
+  const device = requestedDevice === "auto" ? (navigator.gpu ? "webgpu" : "wasm") : requestedDevice;
+  const requestedDtype = state.kokoroDtype || "auto";
+  const dtype = requestedDtype === "auto" ? (device === "webgpu" ? "fp32" : "q8") : requestedDtype;
+  return { device, dtype };
+}
+
+function kokoroRuntimeKey() {
+  const { device, dtype } = getKokoroRuntimeOptions();
+  return `${device}:${dtype}`;
+}
+
+function formatProgress(progress) {
+  if (!progress) return "Loading Kokoro...";
+  if (progress.status === "progress" && Number.isFinite(progress.progress)) {
+    return `Loading Kokoro ${Math.round(progress.progress)}%`;
+  }
+  if (progress.status === "ready") return "Kokoro Ready";
+  if (progress.file) return `Loading ${progress.file}`;
+  return "Loading Kokoro...";
+}
+
+async function loadKokoro() {
+  const key = kokoroRuntimeKey();
+  if (kokoroTts && kokoroConfigKey === key) return kokoroTts;
+
+  const { device, dtype } = getKokoroRuntimeOptions();
+  setEngineStatus(`Loading Kokoro (${device}, ${dtype})`);
+  try {
+    kokoroTts = await KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
+      device,
+      dtype,
+      progress_callback: (progress) => setEngineStatus(formatProgress(progress)),
+    });
+    kokoroConfigKey = key;
+    populateKokoroVoices();
+    setEngineStatus("Kokoro Ready");
+    return kokoroTts;
+  } catch (error) {
+    if (device === "webgpu") {
+      setEngineStatus("WebGPU failed, trying WASM");
+      kokoroTts = await KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
+        device: "wasm",
+        dtype: state.kokoroDtype === "q4" ? "q4" : "q8",
+        progress_callback: (progress) => setEngineStatus(formatProgress(progress)),
+      });
+      kokoroConfigKey = `wasm:${state.kokoroDtype === "q4" ? "q4" : "q8"}`;
+      populateKokoroVoices();
+      setEngineStatus("Kokoro Ready");
+      return kokoroTts;
+    }
+    throw error;
+  }
+}
+
+function populateKokoroVoices() {
+  if (!kokoroTts?.voices) return;
+  const select = $("#kokoroVoiceSelect");
+  const current = state.kokoroVoice || DEFAULT_KOKORO_VOICE;
+  select.innerHTML = "";
+  Object.entries(kokoroTts.voices).forEach(([id, voice]) => {
+    const option = document.createElement("option");
+    option.value = id;
+    option.textContent = `${voice.name || id} - ${voice.language || "English"} ${voice.gender || ""}`.trim();
+    select.append(option);
+  });
+  select.value = select.querySelector(`option[value="${current}"]`) ? current : DEFAULT_KOKORO_VOICE;
+  state.kokoroVoice = select.value;
+  saveState();
+}
+
+async function speakWithKokoro(text, onEnd) {
+  const tts = await loadKokoro();
+  const voice = state.kokoroVoice || DEFAULT_KOKORO_VOICE;
+  const speed = Number(state.rate) || 1;
+  const cacheKey = `${kokoroConfigKey}:${voice}:${speed}:${text}`;
+  let blob = audioCache.get(cacheKey);
+  if (!blob) {
+    setEngineStatus("Generating audio...");
+    const audio = await tts.generate(text, { voice, speed });
+    blob = audio.toBlob();
+    audioCache.set(cacheKey, blob);
+    if (audioCache.size > 24) {
+      const oldestKey = audioCache.keys().next().value;
+      audioCache.delete(oldestKey);
+    }
+  }
+
+  activeAudioUrl = URL.createObjectURL(blob);
+  activeAudio = new Audio(activeAudioUrl);
+  activeAudio.onplay = () => {
+    isSpeaking = true;
+    $("#playIcon").textContent = "Stop";
+    setEngineStatus("Playing Kokoro");
+  };
+  activeAudio.onended = () => {
+    URL.revokeObjectURL(activeAudioUrl);
+    activeAudio = null;
+    activeAudioUrl = "";
+    isSpeaking = false;
+    $("#playIcon").textContent = "Play";
+    setEngineStatus("Kokoro Ready");
+    if (onEnd) onEnd();
+  };
+  activeAudio.onerror = () => {
+    stopPlayback();
+    if (onEnd) onEnd();
+  };
+  await activeAudio.play();
+}
+
+function speakWithSystem(text, onEnd) {
   if (!("speechSynthesis" in window)) {
     alert("This browser does not support system speech. Please open it in iPhone Safari.");
     return;
@@ -242,21 +405,37 @@ function speakText(text, onEnd) {
   utterance.onstart = () => {
     isSpeaking = true;
     $("#playIcon").textContent = "Stop";
+    setEngineStatus("Playing system voice");
   };
   utterance.onend = () => {
     isSpeaking = false;
     $("#playIcon").textContent = "Play";
+    setEngineStatus();
     if (onEnd) onEnd();
   };
   utterance.onerror = utterance.onend;
   window.speechSynthesis.speak(utterance);
 }
 
-function speakCurrent() {
+async function speakText(text, onEnd) {
+  if ((state.engine || "kokoro") === "system") {
+    speakWithSystem(text, onEnd);
+    return;
+  }
+
+  try {
+    await speakWithKokoro(text, onEnd);
+  } catch (error) {
+    console.error(error);
+    setEngineStatus("Kokoro failed");
+    alert("Kokoro could not run in this browser. Switch Engine to System Voice or try WASM/Balanced settings.");
+    stopPlayback();
+  }
+}
+
+async function speakCurrent() {
   if (isSpeaking) {
-    window.speechSynthesis.cancel();
-    isSpeaking = false;
-    $("#playIcon").textContent = "Play";
+    stopPlayback();
     return;
   }
 
@@ -278,9 +457,7 @@ function moveSentence(direction) {
   const currentIndex = project.sentences.findIndex((sentence) => sentence.id === state.activeSentenceId);
   const nextIndex = (currentIndex + direction + project.sentences.length) % project.sentences.length;
   state.activeSentenceId = project.sentences[nextIndex].id;
-  window.speechSynthesis?.cancel();
-  isSpeaking = false;
-  $("#playIcon").textContent = "Play";
+  stopPlayback();
   render();
 }
 
@@ -314,8 +491,8 @@ function openNewSentence() {
 
 function populateVoices() {
   voices = window.speechSynthesis?.getVoices?.() || [];
-  const select = $("#voiceSelect");
-  const current = select.value || state.voiceURI;
+  const select = $("#systemVoiceSelect");
+  const current = select.value || state.systemVoiceURI;
   select.innerHTML = `<option value="">System Default</option>`;
   voices.forEach((voice) => {
     const option = document.createElement("option");
@@ -380,6 +557,12 @@ $("#playPause").addEventListener("click", speakCurrent);
 $("#prevSentence").addEventListener("click", () => moveSentence(-1));
 $("#nextSentence").addEventListener("click", () => moveSentence(1));
 
+$("#engineSelect").addEventListener("change", (event) => {
+  stopPlayback();
+  state.engine = event.target.value;
+  render();
+});
+
 $("#sentenceForm").addEventListener("submit", (event) => {
   event.preventDefault();
   const input = $("#sentenceInput");
@@ -395,12 +578,37 @@ $("#repeatCount").addEventListener("change", (event) => {
 $("#rateRange").addEventListener("input", (event) => {
   state.rate = Number(event.target.value);
   $("#rateLabel").textContent = `${state.rate.toFixed(1)}x`;
+  stopPlayback();
   saveState();
 });
 
-$("#voiceSelect").addEventListener("change", (event) => {
-  state.voiceURI = event.target.value;
+$("#systemVoiceSelect").addEventListener("change", (event) => {
+  state.systemVoiceURI = event.target.value;
   saveState();
+});
+
+$("#kokoroVoiceSelect").addEventListener("change", (event) => {
+  stopPlayback();
+  state.kokoroVoice = event.target.value;
+  saveState();
+});
+
+$("#kokoroDeviceSelect").addEventListener("change", (event) => {
+  stopPlayback();
+  state.kokoroDevice = event.target.value;
+  kokoroTts = null;
+  kokoroConfigKey = "";
+  saveState();
+  setEngineStatus();
+});
+
+$("#kokoroDtypeSelect").addEventListener("change", (event) => {
+  stopPlayback();
+  state.kokoroDtype = event.target.value;
+  kokoroTts = null;
+  kokoroConfigKey = "";
+  saveState();
+  setEngineStatus();
 });
 
 $("#createFolder").addEventListener("click", () => {
