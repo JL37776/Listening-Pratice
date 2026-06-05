@@ -14,6 +14,8 @@ export function render() {
   $("#currentProjectName").textContent = activeProject().name;
   $("#repeatCount").value = state.repeatCount;
   $("#repeatScope").value = state.repeatScope;
+  $("#speedPattern").value = state.repeatSpeedPattern || "1, 0.8, 0.5";
+  $("#speedPatternRow").hidden = state.repeatScope !== "project-speed-pattern";
   $("#rateRange").value = state.rate;
   $("#rateLabel").textContent = `${Number(state.rate).toFixed(1)}x`;
   $("#engineSelect").value = state.engine;

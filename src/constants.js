@@ -8,6 +8,7 @@ export const DEFAULT_STATE = {
   activeSentenceId: "s1",
   repeatCount: 3,
   repeatScope: "sentence",
+  repeatSpeedPattern: "1, 0.8, 0.5",
   rate: 0.9,
   engine: "kokoro",
   systemVoiceURI: "",

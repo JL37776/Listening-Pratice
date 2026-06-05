@@ -49,14 +49,14 @@ export async function loadKokoro(state, callbacks = {}) {
   return result;
 }
 
-export async function generateKokoroAudio(state, text, callbacks = {}) {
+export async function generateKokoroAudio(state, text, callbacks = {}, speed = Number(state.rate) || 1) {
   await loadKokoro(state, callbacks);
   return requestWorker(
     "generate",
     {
       text,
       voice: state.kokoroVoice || DEFAULT_KOKORO_VOICE,
-      speed: Number(state.rate) || 1,
+      speed,
     },
     callbacks,
     WORKER_TIMEOUT_MS,

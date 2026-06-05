@@ -40,27 +40,48 @@ function handleKokoroProgress(progress) {
   setEngineStatus(progress.label);
 }
 
-async function playWithKokoro(text, onEnd) {
+async function prepareKokoroAudio(text, speed, showProgress = true) {
   await unlockAudio();
   const voice = state.kokoroVoice;
-  const speed = Number(state.rate) || 1;
   const cacheKey = `${runtimeKey(state)}:${voice}:${speed}:${text}`;
-  let audioBuffer = audioCache.get(cacheKey);
+  let audioPromise = audioCache.get(cacheKey);
 
-  if (!audioBuffer) {
-    setEngineStatus("Generating audio...");
-    const result = await generateKokoroAudio(state, text, { onProgress: handleKokoroProgress });
-    populateKokoroVoices(result.voices);
-    audioBuffer = result.audioBuffer;
-    audioCache.set(cacheKey, audioBuffer);
-    if (audioCache.size > 20) audioCache.delete(audioCache.keys().next().value);
+  if (!audioPromise) {
+    if (showProgress) setEngineStatus("Generating audio...");
+    audioPromise = generateKokoroAudio(
+      state,
+      text,
+      showProgress ? { onProgress: handleKokoroProgress } : {},
+      speed,
+    ).then((result) => {
+      populateKokoroVoices(result.voices);
+      return result.audioBuffer;
+    }).catch((error) => {
+      audioCache.delete(cacheKey);
+      throw error;
+    });
+    audioCache.set(cacheKey, audioPromise);
+    if (audioCache.size > 30) audioCache.delete(audioCache.keys().next().value);
   }
 
+  return audioPromise;
+}
+
+function prefetchKokoroItem(item) {
+  if (!item || state.engine !== "kokoro") return;
+  prepareKokoroAudio(item.sentence.text, item.speed, false).catch((error) => {
+    console.warn("Kokoro prefetch failed", error);
+  });
+}
+
+async function playWithKokoro(item, { onStart, onEnd }) {
+  const audioBuffer = await prepareKokoroAudio(item.sentence.text, item.speed, true);
   await playWavBuffer(audioBuffer, {
     onStart: () => {
       isSpeaking = true;
       $("#playIcon").textContent = "Stop";
-      setEngineStatus("Playing Kokoro");
+      setEngineStatus(`Playing Kokoro ${item.speed}x`);
+      onStart?.();
     },
     onEnd: () => {
       isSpeaking = false;
@@ -76,14 +97,15 @@ async function playWithKokoro(text, onEnd) {
   });
 }
 
-function playWithSystem(text, onEnd) {
-  speakWithSystem(text, {
-    rate: state.rate,
+function playWithSystem(item, { onStart, onEnd }) {
+  speakWithSystem(item.sentence.text, {
+    rate: item.speed,
     voiceURI: state.systemVoiceURI,
     onStart: () => {
       isSpeaking = true;
       $("#playIcon").textContent = "Stop";
-      setEngineStatus("Playing system voice");
+      setEngineStatus(`Playing system voice ${item.speed}x`);
+      onStart?.();
     },
     onEnd: () => {
       isSpeaking = false;
@@ -94,13 +116,13 @@ function playWithSystem(text, onEnd) {
   });
 }
 
-async function speakText(text, onEnd) {
+async function speakItem(item, { onStart, onEnd }) {
   try {
     if (state.engine === "system") {
-      playWithSystem(text, onEnd);
+      playWithSystem(item, { onStart, onEnd });
       return;
     }
-    await playWithKokoro(text, onEnd);
+    await playWithKokoro(item, { onStart, onEnd });
   } catch (error) {
     console.error(error);
     stopPlayback();
@@ -125,11 +147,15 @@ async function speakCurrent() {
   let index = 0;
   const playNext = () => {
     if (session !== playbackSession || index >= queue.length) return;
-    const sentence = queue[index];
+    const item = queue[index];
+    const sentence = item.sentence;
     state.activeSentenceId = sentence.id;
     render();
     index += 1;
-    speakText(sentence.text, playNext);
+    speakItem(item, {
+      onStart: () => prefetchKokoroItem(queue[index]),
+      onEnd: playNext,
+    });
   };
   playNext();
 }
@@ -139,11 +165,31 @@ function buildPlaybackQueue(project, repeat) {
   if (state.repeatScope === "project") {
     const startIndex = Math.max(0, sentences.findIndex((sentence) => sentence.id === state.activeSentenceId));
     const ordered = [...sentences.slice(startIndex), ...sentences.slice(0, startIndex)];
-    return Array.from({ length: repeat }, () => ordered).flat();
+    return Array.from({ length: repeat }, () => ordered).flat().map((sentence) => ({
+      sentence,
+      speed: Number(state.rate) || 1,
+    }));
+  }
+
+  if (state.repeatScope === "project-speed-pattern") {
+    const startIndex = Math.max(0, sentences.findIndex((sentence) => sentence.id === state.activeSentenceId));
+    const ordered = [...sentences.slice(startIndex), ...sentences.slice(0, startIndex)];
+    const speeds = parseSpeedPattern();
+    return ordered.flatMap((sentence) => speeds.map((speed) => ({ sentence, speed })));
   }
 
   const sentence = activeSentence();
-  return sentence ? Array.from({ length: repeat }, () => sentence) : [];
+  return sentence
+    ? Array.from({ length: repeat }, () => ({ sentence, speed: Number(state.rate) || 1 }))
+    : [];
+}
+
+function parseSpeedPattern() {
+  const speeds = String(state.repeatSpeedPattern || "")
+    .split(/[,\s]+/)
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isFinite(value) && value >= 0.4 && value <= 2);
+  return speeds.length ? speeds : [1, 0.8, 0.5];
 }
 
 function selectSentence(id) {
@@ -291,7 +337,15 @@ $("#repeatCount").addEventListener("change", (event) => {
 
 $("#repeatScope").addEventListener("change", (event) => {
   stopPlayback();
-  state.repeatScope = event.target.value === "project" ? "project" : "sentence";
+  state.repeatScope = ["sentence", "project", "project-speed-pattern"].includes(event.target.value)
+    ? event.target.value
+    : "sentence";
+  render();
+});
+
+$("#speedPattern").addEventListener("change", (event) => {
+  stopPlayback();
+  state.repeatSpeedPattern = event.target.value.trim() || "1, 0.8, 0.5";
   render();
 });
 

@@ -26,7 +26,10 @@ export function ensureState() {
   state.kokoroVoice ||= DEFAULT_KOKORO_VOICE;
   state.kokoroDevice ||= "auto";
   state.kokoroDtype ||= "auto";
-  state.repeatScope = state.repeatScope === "project" ? "project" : "sentence";
+  state.repeatScope = ["sentence", "project", "project-speed-pattern"].includes(state.repeatScope)
+    ? state.repeatScope
+    : "sentence";
+  state.repeatSpeedPattern ||= "1, 0.8, 0.5";
   state.repeatCount = Math.min(9, Math.max(1, Number(state.repeatCount) || 3));
   state.rate = Math.min(1.5, Math.max(0.5, Number(state.rate) || 0.9));
 
