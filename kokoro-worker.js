@@ -10,7 +10,7 @@ function configureRuntime() {
     env.useBrowserCache = true;
     env.useWasmCache = true;
     if (env.backends?.onnx?.wasm) {
-      env.backends.onnx.wasm.proxy = true;
+      env.backends.onnx.wasm.proxy = false;
       env.backends.onnx.wasm.numThreads = 1;
     }
   } catch {
@@ -59,12 +59,13 @@ function readyPayload() {
 
 async function generateAudio(id, payload) {
   if (!tts) throw new Error("Kokoro model is not loaded");
+  postMessage({ id, type: "progress", payload: { percent: 0, label: "Generating audio..." } });
   const audio = await tts.generate(payload.text, {
     voice: payload.voice,
     speed: payload.speed,
   });
-  const blob = audio.toBlob();
-  const audioBuffer = await blob.arrayBuffer();
+  postMessage({ id, type: "progress", payload: { percent: 95, label: "Preparing audio..." } });
+  const audioBuffer = audio.toWav();
   postMessage({ id, type: "audio", payload: { audioBuffer } }, [audioBuffer]);
 }
 

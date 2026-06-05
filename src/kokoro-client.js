@@ -7,10 +7,15 @@ let activeRequest = null;
 
 export function getRuntimeOptions(state) {
   const requestedDevice = state.kokoroDevice || "auto";
-  const device = requestedDevice === "auto" ? (navigator.gpu ? "webgpu" : "wasm") : requestedDevice;
+  const device = requestedDevice === "auto" ? (isIOS() ? "wasm" : navigator.gpu ? "webgpu" : "wasm") : requestedDevice;
   const requestedDtype = state.kokoroDtype || "auto";
   const dtype = requestedDtype === "auto" ? (device === "webgpu" ? "fp32" : "q8") : requestedDtype;
   return { device, dtype };
+}
+
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
 export function runtimeKey(state) {
