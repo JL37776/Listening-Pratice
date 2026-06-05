@@ -44,10 +44,11 @@ button {
 }
 
 .top-bar,
+.top-actions,
 .section-heading,
 .now-playing,
 .transport-row,
-.settings-grid,
+.basic-controls,
 .voice-row,
 .sheet-head,
 .dialog-actions,
@@ -63,6 +64,10 @@ button {
   justify-content: space-between;
   gap: 12px;
   padding-bottom: 12px;
+}
+
+.top-actions {
+  gap: 8px;
 }
 
 .top-bar h1,
@@ -262,6 +267,7 @@ button {
   background: var(--surface-2);
 }
 
+.basic-controls,
 .settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -269,6 +275,7 @@ button {
   margin-top: 12px;
 }
 
+.basic-controls label,
 .settings-grid label {
   min-width: 0;
   display: grid;
@@ -277,6 +284,7 @@ button {
   font-size: 12px;
 }
 
+.basic-controls input[type="number"],
 .settings-grid input[type="number"] {
   width: 100%;
   height: 38px;
@@ -296,6 +304,7 @@ button {
   color: var(--text);
 }
 
+.basic-controls input[type="range"],
 .settings-grid input[type="range"] {
   width: 100%;
   accent-color: var(--teal);
@@ -486,6 +495,41 @@ button {
   border-radius: 8px;
   background: #fff0f0;
   color: var(--danger);
+}
+
+.install-copy {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.install-progress {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.install-progress span {
+  display: block;
+  width: 0%;
+  height: 100%;
+  background: var(--teal);
+  transition: width 0.2s ease;
+}
+
+.install-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.install-meta strong {
+  color: var(--text);
 }
 
 @media (min-width: 700px) {

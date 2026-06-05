@@ -1,482 +1,110 @@
-import { KokoroTTS } from "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm";
+import { $, els } from "./src/dom.js";
+import { MODEL_READY_KEY } from "./src/constants.js";
+import { activeProject, activeSentence, state, uid } from "./src/state.js";
+import { closeInstallDialog, populateKokoroVoices, render, setEngineStatus, setRenderCallbacks, showInstallDialog, updateInstallProgress } from "./src/render.js";
+import { generateKokoroAudio, loadKokoro, resetKokoroWorker, runtimeKey } from "./src/kokoro-client.js";
+import { playWavBuffer, stopAudio, unlockAudio } from "./src/audio-player.js";
+import { populateSystemVoices, speakWithSystem, stopSystemSpeech } from "./src/system-speech.js";
 
-const STORAGE_KEY = "listening-practice-state-v2";
-const KOKORO_MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
-const DEFAULT_KOKORO_VOICE = "af_heart";
-
-const defaultState = {
-  activeFolderId: "daily",
-  activeProjectId: "morning",
-  activeSentenceId: "s1",
-  repeatCount: 3,
-  rate: 0.9,
-  engine: "kokoro",
-  systemVoiceURI: "",
-  kokoroVoice: DEFAULT_KOKORO_VOICE,
-  kokoroDevice: "auto",
-  kokoroDtype: "auto",
-  folders: [
-    {
-      id: "daily",
-      name: "Daily English",
-      projects: [
-        {
-          id: "morning",
-          name: "Morning Practice",
-          sentences: [
-            {
-              id: "s1",
-              text: "I want to improve my listening every day.",
-              note: "Daily listening routine.",
-            },
-            {
-              id: "s2",
-              text: "Could you speak a little more slowly?",
-              note: "Useful question for real conversations.",
-            },
-            {
-              id: "s3",
-              text: "I will review these sentences before going to bed.",
-              note: "Review before bed.",
-            },
-          ],
-        },
-      ],
-    },
-  ],
-};
-
-let state = loadState();
-let voices = [];
 let isSpeaking = false;
 let editSentenceId = null;
-let kokoroTts = null;
-let kokoroConfigKey = "";
-let activeAudio = null;
-let activeAudioUrl = "";
 const audioCache = new Map();
 
-const $ = (selector) => document.querySelector(selector);
-const sentenceList = $("#sentenceList");
-const libraryDialog = $("#libraryDialog");
-const editDialog = $("#editDialog");
-
-function loadState() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : structuredClone(defaultState);
-  } catch {
-    return structuredClone(defaultState);
-  }
-}
-
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-function uid(prefix) {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function ensureState() {
-  state.engine ||= "kokoro";
-  state.systemVoiceURI ||= "";
-  state.kokoroVoice ||= DEFAULT_KOKORO_VOICE;
-  state.kokoroDevice ||= "auto";
-  state.kokoroDtype ||= "auto";
-  state.repeatCount = Math.min(9, Math.max(1, Number(state.repeatCount) || 3));
-  state.rate = Math.min(1.5, Math.max(0.5, Number(state.rate) || 0.9));
-
-  if (!Array.isArray(state.folders) || !state.folders.length) {
-    state.folders = [{ id: uid("folder"), name: "My Folder", projects: [] }];
-  }
-
-  state.folders.forEach((folder) => {
-    if (!Array.isArray(folder.projects)) folder.projects = [];
-  });
-
-  if (!state.folders.some((folder) => folder.id === state.activeFolderId)) {
-    state.activeFolderId = state.folders[0].id;
-  }
-
-  const folder = activeFolder();
-  if (!folder.projects.length) {
-    folder.projects.push({ id: uid("project"), name: "General Practice", sentences: [] });
-  }
-
-  if (!folder.projects.some((project) => project.id === state.activeProjectId)) {
-    state.activeProjectId = folder.projects[0].id;
-  }
-
-  const project = activeProject();
-  if (!project.sentences.some((sentence) => sentence.id === state.activeSentenceId)) {
-    state.activeSentenceId = project.sentences[0]?.id || "";
-  }
-}
-
-function activeFolder() {
-  return state.folders.find((folder) => folder.id === state.activeFolderId) || state.folders[0];
-}
-
-function activeProject() {
-  const folder = activeFolder();
-  return folder.projects.find((project) => project.id === state.activeProjectId) || folder.projects[0];
-}
-
-function activeSentence() {
-  const project = activeProject();
-  return project.sentences.find((sentence) => sentence.id === state.activeSentenceId) || project.sentences[0];
-}
-
-function render() {
-  ensureState();
-  $("#currentFolderName").textContent = activeFolder().name;
-  $("#currentProjectName").textContent = activeProject().name;
-  $("#repeatCount").value = state.repeatCount;
-  $("#rateRange").value = state.rate;
-  $("#rateLabel").textContent = `${Number(state.rate).toFixed(1)}x`;
-  $("#engineSelect").value = state.engine || "kokoro";
-  $("#kokoroVoiceSelect").value = state.kokoroVoice || DEFAULT_KOKORO_VOICE;
-  $("#kokoroDeviceSelect").value = state.kokoroDevice || "auto";
-  $("#kokoroDtypeSelect").value = state.kokoroDtype || "auto";
-  $("#systemVoiceRow").hidden = state.engine !== "system";
-  $("#engineStatus").textContent = state.engine === "system" ? "System Speech" : "Kokoro TTS";
-  renderSentences();
-  renderLibrary();
-  renderNowPlaying();
-  saveState();
-}
-
-function renderSentences() {
-  const project = activeProject();
-  sentenceList.innerHTML = "";
-
-  if (!project.sentences.length) {
-    const empty = document.createElement("article");
-    empty.className = "sentence-row empty";
-    empty.innerHTML = `
-      <div>
-        <p class="sentence-text">No sentences yet</p>
-        <p class="sentence-note">Add your first sentence below.</p>
-      </div>
-    `;
-    sentenceList.append(empty);
-    return;
-  }
-
-  project.sentences.forEach((sentence) => {
-    const row = document.createElement("article");
-    row.className = `sentence-row${sentence.id === state.activeSentenceId ? " selected" : ""}`;
-    row.innerHTML = `
-      <button class="sentence-copy" type="button">
-        <p class="sentence-text"></p>
-        <p class="sentence-note"></p>
-      </button>
-      <div class="row-actions">
-        <button class="mini-button play-one" type="button" aria-label="Play sentence">Play</button>
-        <button class="mini-button edit-one" type="button" aria-label="Edit sentence">Edit</button>
-      </div>
-    `;
-    row.querySelector(".sentence-text").textContent = sentence.text;
-    row.querySelector(".sentence-note").textContent = sentence.note || "No note";
-    row.querySelector(".sentence-copy").addEventListener("click", () => selectSentence(sentence.id));
-    row.querySelector(".play-one").addEventListener("click", () => {
-      selectSentence(sentence.id);
-      speakCurrent();
-    });
-    row.querySelector(".edit-one").addEventListener("click", () => openEdit(sentence.id));
-    sentenceList.append(row);
-  });
-}
-
-function renderLibrary() {
-  const folderList = $("#folderList");
-  folderList.innerHTML = "";
-
-  state.folders.forEach((folder) => {
-    const block = document.createElement("section");
-    block.className = "folder-block";
-    block.innerHTML = `
-      <div class="folder-title-row">
-        <p class="folder-title">${folder.name}</p>
-        <div class="library-mini-actions">
-          <button type="button" data-action="rename-folder">Rename</button>
-          <button type="button" data-action="delete-folder">Delete</button>
-        </div>
-      </div>
-    `;
-    block.querySelector('[data-action="rename-folder"]').addEventListener("click", () => renameFolder(folder.id));
-    block.querySelector('[data-action="delete-folder"]').addEventListener("click", () => deleteFolder(folder.id));
-
-    folder.projects.forEach((project) => {
-      const row = document.createElement("div");
-      row.className = `project-row${project.id === state.activeProjectId ? " active" : ""}`;
-
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "project-button";
-      button.textContent = `${project.name} - ${project.sentences.length} sentences`;
-      button.addEventListener("click", () => {
-        state.activeFolderId = folder.id;
-        state.activeProjectId = project.id;
-        state.activeSentenceId = project.sentences[0]?.id || "";
-        render();
-        libraryDialog.close();
-      });
-
-      const actions = document.createElement("div");
-      actions.className = "project-actions";
-      actions.innerHTML = `
-        <button type="button" aria-label="Rename project">Edit</button>
-        <button type="button" aria-label="Delete project">Delete</button>
-      `;
-      actions.children[0].addEventListener("click", () => renameProject(folder.id, project.id));
-      actions.children[1].addEventListener("click", () => deleteProject(folder.id, project.id));
-
-      row.append(button, actions);
-      block.append(row);
-    });
-    folderList.append(block);
-  });
-}
-
-function renderNowPlaying() {
-  const sentence = activeSentence();
-  $("#nowTitle").textContent = sentence ? sentence.text : "Ready";
-  $("#nowSubtitle").textContent = sentence ? sentence.note || "Press play to practice." : "Add a sentence to start.";
-}
-
-function selectSentence(id) {
-  state.activeSentenceId = id;
-  render();
-}
-
-function selectedVoice() {
-  return voices.find((voice) => voice.voiceURI === state.systemVoiceURI) || null;
-}
-
 function stopPlayback() {
-  window.speechSynthesis?.cancel();
-  if (activeAudio) {
-    activeAudio.pause();
-    activeAudio.currentTime = 0;
-  }
-  if (activeAudioUrl) {
-    URL.revokeObjectURL(activeAudioUrl);
-  }
-  activeAudio = null;
-  activeAudioUrl = "";
+  stopSystemSpeech();
+  stopAudio();
   isSpeaking = false;
   $("#playIcon").textContent = "Play";
   setEngineStatus();
 }
 
-function setEngineStatus(message = "") {
-  if (message) {
-    $("#engineStatus").textContent = message;
-    return;
-  }
-  $("#engineStatus").textContent = state.engine === "system" ? "System Speech" : "Kokoro TTS";
-}
-
-function isIOS() {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent)
-    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-}
-
-function isAndroid() {
-  return /Android/i.test(navigator.userAgent);
-}
-
-function isIOS() {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent)
-      || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-}
-
-
-function getKokoroRuntimeOptions() {
-
-  // iOS force WASM
-  if (isIOS()) {
-    return {
-      device: "wasm",
-      dtype: "q8"
-    };
-  }
-
-  const requestedDevice = state.kokoroDevice || "auto";
-
-  const device = requestedDevice === "auto"
-    ? (navigator.gpu ? "webgpu" : "wasm")
-    : requestedDevice;
-
-  const requestedDtype = state.kokoroDtype || "auto";
-
-  const dtype = requestedDtype === "auto"
-    ? (device === "webgpu" ? "fp32" : "q8")
-    : requestedDtype;
-
-  return { device, dtype };
-}
-
-  const device = requestedDevice;
-
-  const requestedDtype = state.kokoroDtype || "auto";
-
-  const dtype =
-    requestedDtype === "auto"
-      ? (device === "webgpu" ? "fp32" : "q8")
-      : requestedDtype;
-
-  return { device, dtype };
-}
-
-function kokoroRuntimeKey() {
-  const { device, dtype } = getKokoroRuntimeOptions();
-  return `${device}:${dtype}`;
-}
-
-function formatProgress(progress) {
-  if (!progress) return "Loading Kokoro...";
-  if (progress.status === "progress" && Number.isFinite(progress.progress)) {
-    return `Loading Kokoro ${Math.round(progress.progress)}%`;
-  }
-  if (progress.status === "ready") return "Kokoro Ready";
-  if (progress.file) return `Loading ${progress.file}`;
-  return "Loading Kokoro...";
-}
-
-async function loadKokoro() {
-  const key = kokoroRuntimeKey();
-  if (kokoroTts && kokoroConfigKey === key) return kokoroTts;
-
-  const { device, dtype } = getKokoroRuntimeOptions();
-setEngineStatus(
-  `Loading Kokoro (${device.toUpperCase()} ${dtype.toUpperCase()})`
-);
+async function installKokoro() {
   try {
-    kokoroTts = await KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
-      device,
-      dtype,
-      progress_callback: (progress) => setEngineStatus(formatProgress(progress)),
-    });
-    kokoroConfigKey = key;
-    populateKokoroVoices();
-    setEngineStatus("Kokoro Ready");
-    return kokoroTts;
+    showInstallDialog();
+    await unlockAudio();
+    const result = await loadKokoro(state, { onProgress: handleKokoroProgress });
+    populateKokoroVoices(result.voices);
+    updateInstallProgress(100, "Kokoro is ready.");
+    window.setTimeout(closeInstallDialog, 500);
   } catch (error) {
-    if (device === "webgpu") {
-      setEngineStatus("WebGPU failed, trying WASM");
-      kokoroTts = await KokoroTTS.from_pretrained(KOKORO_MODEL_ID, {
-        device: "wasm",
-        dtype: state.kokoroDtype === "q4" ? "q4" : "q8",
-        progress_callback: (progress) => setEngineStatus(formatProgress(progress)),
-      });
-      kokoroConfigKey = `wasm:${state.kokoroDtype === "q4" ? "q4" : "q8"}`;
-      populateKokoroVoices();
-      setEngineStatus("Kokoro Ready");
-      return kokoroTts;
-    }
-    throw error;
+    console.error(error);
+    updateInstallProgress(0, "Install failed. Please reload and try again.");
+    setEngineStatus("Kokoro install failed");
   }
 }
 
-function populateKokoroVoices() {
-  if (!kokoroTts?.voices) return;
-  const select = $("#kokoroVoiceSelect");
-  const current = state.kokoroVoice || DEFAULT_KOKORO_VOICE;
-  select.innerHTML = "";
-  Object.entries(kokoroTts.voices).forEach(([id, voice]) => {
-    const option = document.createElement("option");
-    option.value = id;
-    option.textContent = `${voice.name || id} - ${voice.language || "English"} ${voice.gender || ""}`.trim();
-    select.append(option);
-  });
-  select.value = select.querySelector(`option[value="${current}"]`) ? current : DEFAULT_KOKORO_VOICE;
-  state.kokoroVoice = select.value;
-  saveState();
+function handleKokoroProgress(progress) {
+  updateInstallProgress(progress.percent, progress.label);
+  setEngineStatus(progress.label);
 }
 
-async function speakWithKokoro(text, onEnd) {
-  const tts = await loadKokoro();
-  const voice = state.kokoroVoice || DEFAULT_KOKORO_VOICE;
+async function playWithKokoro(text, onEnd) {
+  await unlockAudio();
+  const voice = state.kokoroVoice;
   const speed = Number(state.rate) || 1;
-  const cacheKey = `${kokoroConfigKey}:${voice}:${speed}:${text}`;
-  let blob = audioCache.get(cacheKey);
-  if (!blob) {
+  const cacheKey = `${runtimeKey(state)}:${voice}:${speed}:${text}`;
+  let audioBuffer = audioCache.get(cacheKey);
+
+  if (!audioBuffer) {
     setEngineStatus("Generating audio...");
-    const audio = await tts.generate(text, { voice, speed });
-    alert("generate done");
-    blob = audio.toBlob();
-    audioCache.set(cacheKey, blob);
-    if (audioCache.size > 24) {
-      const oldestKey = audioCache.keys().next().value;
-      audioCache.delete(oldestKey);
-    }
+    const result = await generateKokoroAudio(state, text, { onProgress: handleKokoroProgress });
+    populateKokoroVoices(result.voices);
+    audioBuffer = result.audioBuffer;
+    audioCache.set(cacheKey, audioBuffer);
+    if (audioCache.size > 20) audioCache.delete(audioCache.keys().next().value);
   }
 
-  activeAudioUrl = URL.createObjectURL(blob);
-  activeAudio = new Audio(activeAudioUrl);
-  activeAudio.onplay = () => {
-    isSpeaking = true;
-    $("#playIcon").textContent = "Stop";
-    setEngineStatus("Playing Kokoro");
-  };
-  activeAudio.onended = () => {
-    URL.revokeObjectURL(activeAudioUrl);
-    activeAudio = null;
-    activeAudioUrl = "";
-    isSpeaking = false;
-    $("#playIcon").textContent = "Play";
-    setEngineStatus("Kokoro Ready");
-    if (onEnd) onEnd();
-  };
-  activeAudio.onerror = () => {
-    stopPlayback();
-    if (onEnd) onEnd();
-  };
-  await activeAudio.play();
+  await playWavBuffer(audioBuffer, {
+    onStart: () => {
+      isSpeaking = true;
+      $("#playIcon").textContent = "Stop";
+      setEngineStatus("Playing Kokoro");
+    },
+    onEnd: () => {
+      isSpeaking = false;
+      $("#playIcon").textContent = "Play";
+      setEngineStatus("Kokoro Ready");
+      onEnd?.();
+    },
+    onError: () => {
+      isSpeaking = false;
+      $("#playIcon").textContent = "Play";
+      setEngineStatus("Audio playback failed");
+    },
+  });
 }
 
-function speakWithSystem(text, onEnd) {
-  if (!("speechSynthesis" in window)) {
-    alert("This browser does not support system speech. Please open it in iPhone Safari.");
-    return;
-  }
-
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = Number(state.rate);
-  utterance.voice = selectedVoice();
-  utterance.lang = selectedVoice()?.lang || "en-US";
-  utterance.onstart = () => {
-    isSpeaking = true;
-    $("#playIcon").textContent = "Stop";
-    setEngineStatus("Playing system voice");
-  };
-  utterance.onend = () => {
-    isSpeaking = false;
-    $("#playIcon").textContent = "Play";
-    setEngineStatus();
-    if (onEnd) onEnd();
-  };
-  utterance.onerror = utterance.onend;
-  window.speechSynthesis.speak(utterance);
+function playWithSystem(text, onEnd) {
+  speakWithSystem(text, {
+    rate: state.rate,
+    voiceURI: state.systemVoiceURI,
+    onStart: () => {
+      isSpeaking = true;
+      $("#playIcon").textContent = "Stop";
+      setEngineStatus("Playing system voice");
+    },
+    onEnd: () => {
+      isSpeaking = false;
+      $("#playIcon").textContent = "Play";
+      setEngineStatus();
+      onEnd?.();
+    },
+  });
 }
 
 async function speakText(text, onEnd) {
-  if ((state.engine || "kokoro") === "system") {
-    speakWithSystem(text, onEnd);
-    return;
-  }
-
   try {
-    await speakWithKokoro(text, onEnd);
+    if (state.engine === "system") {
+      playWithSystem(text, onEnd);
+      return;
+    }
+    await playWithKokoro(text, onEnd);
   } catch (error) {
     console.error(error);
-    setEngineStatus("Kokoro failed");
-    alert("Kokoro could not run in this browser. Switch Engine to System Voice or try WASM/Balanced settings.");
     stopPlayback();
+    resetKokoroWorker();
+    setEngineStatus(error.message.includes("timed out") ? "Generation timed out" : "Kokoro failed");
+    alert("Kokoro generation got stuck. Please tap Play again; the worker has been reset.");
   }
 }
 
@@ -485,10 +113,9 @@ async function speakCurrent() {
     stopPlayback();
     return;
   }
-
   const sentence = activeSentence();
   if (!sentence) return;
-
+  await unlockAudio();
   const repeat = Math.max(1, Number(state.repeatCount) || 1);
   let count = 0;
   const playNextRepeat = () => {
@@ -496,6 +123,16 @@ async function speakCurrent() {
     if (count <= repeat) speakText(sentence.text, playNextRepeat);
   };
   playNextRepeat();
+}
+
+function selectSentence(id) {
+  state.activeSentenceId = id;
+  render();
+}
+
+function playSentence(id) {
+  selectSentence(id);
+  speakCurrent();
 }
 
 function moveSentence(direction) {
@@ -511,9 +148,8 @@ function moveSentence(direction) {
 function addSentence(text) {
   const value = text.trim();
   if (!value) return;
-  const project = activeProject();
   const sentence = { id: uid("sentence"), text: value, note: "" };
-  project.sentences.push(sentence);
+  activeProject().sentences.push(sentence);
   state.activeSentenceId = sentence.id;
   render();
 }
@@ -525,7 +161,7 @@ function openEdit(id) {
   $("#editText").value = sentence.text;
   $("#editNote").value = sentence.note || "";
   $("#deleteSentence").hidden = false;
-  editDialog.showModal();
+  els.editDialog.showModal();
 }
 
 function openNewSentence() {
@@ -533,21 +169,15 @@ function openNewSentence() {
   $("#editText").value = "";
   $("#editNote").value = "";
   $("#deleteSentence").hidden = true;
-  editDialog.showModal();
+  els.editDialog.showModal();
 }
 
-function populateVoices() {
-  voices = window.speechSynthesis?.getVoices?.() || [];
-  const select = $("#systemVoiceSelect");
-  const current = select.value || state.systemVoiceURI;
-  select.innerHTML = `<option value="">System Default</option>`;
-  voices.forEach((voice) => {
-    const option = document.createElement("option");
-    option.value = voice.voiceURI;
-    option.textContent = `${voice.name} - ${voice.lang}`;
-    select.append(option);
-  });
-  select.value = voices.some((voice) => voice.voiceURI === current) ? current : "";
+function selectProject(folderId, projectId) {
+  state.activeFolderId = folderId;
+  state.activeProjectId = projectId;
+  state.activeSentenceId = activeProject().sentences[0]?.id || "";
+  render();
+  els.libraryDialog.close();
 }
 
 function renameFolder(folderId) {
@@ -596,13 +226,29 @@ function deleteProject(folderId, projectId) {
   render();
 }
 
-$("#openLibrary").addEventListener("click", () => libraryDialog.showModal());
-$("#projectPicker").addEventListener("click", () => libraryDialog.showModal());
+setRenderCallbacks({
+  selectSentence,
+  playSentence,
+  openEdit,
+  selectProject,
+  renameFolder,
+  deleteFolder,
+  renameProject,
+  deleteProject,
+});
+
+$("#openLibrary").addEventListener("click", () => els.libraryDialog.showModal());
+$("#projectPicker").addEventListener("click", () => els.libraryDialog.showModal());
 $("#quickAdd").addEventListener("click", openNewSentence);
 $("#addSentence").addEventListener("click", openNewSentence);
 $("#playPause").addEventListener("click", speakCurrent);
 $("#prevSentence").addEventListener("click", () => moveSentence(-1));
 $("#nextSentence").addEventListener("click", () => moveSentence(1));
+$("#settingsButton").addEventListener("click", () => els.settingsDialog.showModal());
+document.querySelectorAll(".install-trigger").forEach((button) => {
+  button.addEventListener("click", installKokoro);
+});
+$("#skipInstall").addEventListener("click", closeInstallDialog);
 
 $("#engineSelect").addEventListener("change", (event) => {
   stopPlayback();
@@ -626,36 +272,34 @@ $("#rateRange").addEventListener("input", (event) => {
   state.rate = Number(event.target.value);
   $("#rateLabel").textContent = `${state.rate.toFixed(1)}x`;
   stopPlayback();
-  saveState();
+  render();
 });
 
 $("#systemVoiceSelect").addEventListener("change", (event) => {
   state.systemVoiceURI = event.target.value;
-  saveState();
+  render();
 });
 
 $("#kokoroVoiceSelect").addEventListener("change", (event) => {
   stopPlayback();
   state.kokoroVoice = event.target.value;
-  saveState();
+  render();
 });
 
 $("#kokoroDeviceSelect").addEventListener("change", (event) => {
   stopPlayback();
   state.kokoroDevice = event.target.value;
-  kokoroTts = null;
-  kokoroConfigKey = "";
-  saveState();
-  setEngineStatus();
+  resetKokoroWorker();
+  audioCache.clear();
+  render();
 });
 
 $("#kokoroDtypeSelect").addEventListener("change", (event) => {
   stopPlayback();
   state.kokoroDtype = event.target.value;
-  kokoroTts = null;
-  kokoroConfigKey = "";
-  saveState();
-  setEngineStatus();
+  resetKokoroWorker();
+  audioCache.clear();
+  render();
 });
 
 $("#createFolder").addEventListener("click", () => {
@@ -673,7 +317,8 @@ $("#createProject").addEventListener("click", () => {
   const name = prompt("Project name");
   if (!name?.trim()) return;
   const project = { id: uid("project"), name: name.trim(), sentences: [] };
-  activeFolder().projects.push(project);
+  const folder = state.folders.find((item) => item.id === state.activeFolderId);
+  folder.projects.push(project);
   state.activeProjectId = project.id;
   state.activeSentenceId = "";
   render();
@@ -685,7 +330,6 @@ $("#editForm").addEventListener("submit", (event) => {
   if (!text) return;
   const note = $("#editNote").value.trim();
   const project = activeProject();
-
   if (editSentenceId) {
     const sentence = project.sentences.find((item) => item.id === editSentenceId);
     if (sentence) {
@@ -698,9 +342,8 @@ $("#editForm").addEventListener("submit", (event) => {
     project.sentences.push(sentence);
     state.activeSentenceId = sentence.id;
   }
-
   render();
-  editDialog.close();
+  els.editDialog.close();
 });
 
 $("#deleteSentence").addEventListener("click", () => {
@@ -709,12 +352,16 @@ $("#deleteSentence").addEventListener("click", () => {
   project.sentences = project.sentences.filter((sentence) => sentence.id !== editSentenceId);
   state.activeSentenceId = project.sentences[0]?.id || "";
   render();
-  editDialog.close();
+  els.editDialog.close();
 });
 
 if ("speechSynthesis" in window) {
-  populateVoices();
-  window.speechSynthesis.onvoiceschanged = populateVoices;
+  populateSystemVoices($("#systemVoiceSelect"), state.systemVoiceURI);
+  window.speechSynthesis.onvoiceschanged = () => populateSystemVoices($("#systemVoiceSelect"), state.systemVoiceURI);
 }
 
 render();
+
+if (state.engine === "kokoro" && !localStorage.getItem(MODEL_READY_KEY)) {
+  window.setTimeout(showInstallDialog, 350);
+}

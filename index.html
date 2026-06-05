@@ -16,7 +16,10 @@
           <p class="eyebrow" id="engineStatus">Kokoro TTS</p>
           <h1>Listening Practice</h1>
         </div>
-        <button class="icon-button primary" id="quickAdd" aria-label="Add sentence">Add</button>
+        <div class="top-actions">
+          <button class="icon-button" id="settingsButton" aria-label="Open settings">Settings</button>
+          <button class="icon-button primary" id="quickAdd" aria-label="Add sentence">Add</button>
+        </div>
       </header>
 
       <button class="project-pill" id="projectPicker">
@@ -49,6 +52,31 @@
           <button class="small-control" id="nextSentence" aria-label="Next sentence">Next</button>
         </div>
 
+        <div class="basic-controls">
+          <label>
+            <span>Repeat</span>
+            <input id="repeatCount" type="number" min="1" max="9" value="3" />
+          </label>
+          <label>
+            <span>Speed</span>
+            <input id="rateRange" type="range" min="0.5" max="1.5" step="0.1" value="0.9" />
+            <b id="rateLabel">0.9x</b>
+          </label>
+        </div>
+      </section>
+
+      <form class="composer" id="sentenceForm">
+        <input id="sentenceInput" autocomplete="off" placeholder="Type a new sentence..." />
+        <button type="submit" class="send-button">Save</button>
+      </form>
+    </main>
+
+    <dialog class="sheet" id="settingsDialog">
+      <form method="dialog" class="sheet-inner">
+        <div class="sheet-head">
+          <h2>Voice Settings</h2>
+          <button class="icon-button" value="cancel" aria-label="Close">X</button>
+        </div>
         <div class="settings-grid">
           <label>
             <span>Engine</span>
@@ -69,15 +97,6 @@
               <option value="bf_emma">Emma - UK female</option>
               <option value="bm_george">George - UK male</option>
             </select>
-          </label>
-          <label>
-            <span>Repeat</span>
-            <input id="repeatCount" type="number" min="1" max="9" value="3" />
-          </label>
-          <label>
-            <span>Speed</span>
-            <input id="rateRange" type="range" min="0.5" max="1.5" step="0.1" value="0.9" />
-            <b id="rateLabel">0.9x</b>
           </label>
           <label>
             <span>Device</span>
@@ -104,13 +123,32 @@
             <option value="">System Default</option>
           </select>
         </label>
-      </section>
-
-      <form class="composer" id="sentenceForm">
-        <input id="sentenceInput" autocomplete="off" placeholder="Type a new sentence..." />
-        <button type="submit" class="send-button">Save</button>
+        <div class="dialog-actions">
+          <button type="button" class="text-button install-trigger">Install Model</button>
+          <button type="submit" class="send-button">Done</button>
+        </div>
       </form>
-    </main>
+    </dialog>
+
+    <dialog class="sheet install-sheet" id="installDialog">
+      <form method="dialog" class="sheet-inner">
+        <div class="sheet-head">
+          <h2>Install Kokoro</h2>
+        </div>
+        <p class="install-copy">The voice model downloads once and then runs locally in your browser.</p>
+        <div class="install-progress">
+          <span id="installProgressFill"></span>
+        </div>
+        <div class="install-meta">
+          <span id="installStatus">Preparing model...</span>
+          <strong id="installProgressText">0%</strong>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" id="skipInstall">Later</button>
+          <button type="button" class="send-button install-trigger">Install</button>
+        </div>
+      </form>
+    </dialog>
 
     <dialog class="sheet" id="libraryDialog">
       <form method="dialog" class="sheet-inner">
