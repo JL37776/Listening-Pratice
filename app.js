@@ -28,7 +28,7 @@ async function installKokoro() {
     await unlockAudio();
     const result = await loadKokoro(state, { onProgress: handleKokoroProgress });
     populateKokoroVoices(result.voices);
-    updateInstallProgress(100, "Kokoro is ready.");
+    updateInstallProgress(100, `Kokoro ready (${result.runtime.device}, ${result.runtime.dtype}).`);
     window.setTimeout(closeInstallDialog, 500);
   } catch (error) {
     console.error(error);
@@ -222,7 +222,7 @@ function makePlaybackItems(sentence, speed) {
 }
 
 function splitSpokenText(text) {
-  const maxLength = 420;
+  const maxLength = 180;
   const normalized = text.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) return [normalized];
 

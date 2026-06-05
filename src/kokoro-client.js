@@ -4,13 +4,19 @@ let worker = null;
 let workerReadyKey = "";
 let requestId = 0;
 let activeRequest = null;
-const WORKER_VERSION = "20260605-tts-debug-2";
+const WORKER_VERSION = "20260605-ios-webgpu-q4f16";
 
 export function getRuntimeOptions(state) {
   const requestedDevice = state.kokoroDevice || "auto";
   const device = requestedDevice === "auto" ? (isIOS() ? "wasm" : navigator.gpu ? "webgpu" : "wasm") : requestedDevice;
   const requestedDtype = state.kokoroDtype || "auto";
-  const dtype = requestedDtype === "auto" ? (device === "webgpu" ? "fp32" : "q8") : requestedDtype;
+  const dtype = requestedDtype === "auto"
+    ? device === "webgpu" && isIOS()
+      ? "q4f16"
+      : device === "webgpu"
+        ? "fp32"
+        : "q8"
+    : requestedDtype;
   return { device, dtype };
 }
 
@@ -47,7 +53,7 @@ export async function loadKokoro(state, callbacks = {}) {
   );
   workerReadyKey = result.runtimeKey;
   localStorage.setItem(MODEL_READY_KEY, "1");
-  return result;
+  return { ...result, runtime: options };
 }
 
 export async function generateKokoroAudio(state, text, callbacks = {}, speed = Number(state.rate) || 1) {
