@@ -54,7 +54,14 @@
 
         <div class="basic-controls">
           <label>
-            <span>Repeat</span>
+            <span>Repeat Strategy</span>
+            <select id="repeatScope">
+              <option value="sentence">Single sentence</option>
+              <option value="project">Whole project</option>
+            </select>
+          </label>
+          <label>
+            <span>Repeat Count</span>
             <input id="repeatCount" type="number" min="1" max="9" value="3" />
           </label>
           <label>

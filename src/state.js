@@ -1,4 +1,5 @@
 import { DEFAULT_KOKORO_VOICE, DEFAULT_STATE, STORAGE_KEY } from "./constants.js";
+import { SEED_FOLDERS } from "./seed-projects.js";
 
 export let state = loadState();
 
@@ -25,6 +26,7 @@ export function ensureState() {
   state.kokoroVoice ||= DEFAULT_KOKORO_VOICE;
   state.kokoroDevice ||= "auto";
   state.kokoroDtype ||= "auto";
+  state.repeatScope = state.repeatScope === "project" ? "project" : "sentence";
   state.repeatCount = Math.min(9, Math.max(1, Number(state.repeatCount) || 3));
   state.rate = Math.min(1.5, Math.max(0.5, Number(state.rate) || 0.9));
 
@@ -34,6 +36,7 @@ export function ensureState() {
   state.folders.forEach((folder) => {
     if (!Array.isArray(folder.projects)) folder.projects = [];
   });
+  mergeSeedFolders();
   if (!state.folders.some((folder) => folder.id === state.activeFolderId)) {
     state.activeFolderId = state.folders[0].id;
   }
@@ -50,6 +53,31 @@ export function ensureState() {
   if (!project.sentences.some((sentence) => sentence.id === state.activeSentenceId)) {
     state.activeSentenceId = project.sentences[0]?.id || "";
   }
+}
+
+function mergeSeedFolders() {
+  SEED_FOLDERS.forEach((seedFolder) => {
+    let folder = state.folders.find((item) => item.id === seedFolder.id);
+    if (!folder) {
+      state.folders.push(structuredClone(seedFolder));
+      return;
+    }
+
+    seedFolder.projects.forEach((seedProject) => {
+      const existingProject = folder.projects.find((project) => project.id === seedProject.id);
+      if (!existingProject) {
+        folder.projects.push(structuredClone(seedProject));
+        return;
+      }
+
+      if (!Array.isArray(existingProject.sentences)) existingProject.sentences = [];
+      seedProject.sentences.forEach((seedSentence) => {
+        if (!existingProject.sentences.some((sentence) => sentence.id === seedSentence.id)) {
+          existingProject.sentences.push(structuredClone(seedSentence));
+        }
+      });
+    });
+  });
 }
 
 export function activeFolder() {

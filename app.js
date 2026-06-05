@@ -8,9 +8,11 @@ import { populateSystemVoices, speakWithSystem, stopSystemSpeech } from "./src/s
 
 let isSpeaking = false;
 let editSentenceId = null;
+let playbackSession = 0;
 const audioCache = new Map();
 
 function stopPlayback() {
+  playbackSession += 1;
   stopSystemSpeech();
   stopAudio();
   isSpeaking = false;
@@ -113,16 +115,35 @@ async function speakCurrent() {
     stopPlayback();
     return;
   }
-  const sentence = activeSentence();
-  if (!sentence) return;
+  const project = activeProject();
+  if (!project.sentences.length) return;
   await unlockAudio();
+  playbackSession += 1;
+  const session = playbackSession;
   const repeat = Math.max(1, Number(state.repeatCount) || 1);
-  let count = 0;
-  const playNextRepeat = () => {
-    count += 1;
-    if (count <= repeat) speakText(sentence.text, playNextRepeat);
+  const queue = buildPlaybackQueue(project, repeat);
+  let index = 0;
+  const playNext = () => {
+    if (session !== playbackSession || index >= queue.length) return;
+    const sentence = queue[index];
+    state.activeSentenceId = sentence.id;
+    render();
+    index += 1;
+    speakText(sentence.text, playNext);
   };
-  playNextRepeat();
+  playNext();
+}
+
+function buildPlaybackQueue(project, repeat) {
+  const sentences = project.sentences;
+  if (state.repeatScope === "project") {
+    const startIndex = Math.max(0, sentences.findIndex((sentence) => sentence.id === state.activeSentenceId));
+    const ordered = [...sentences.slice(startIndex), ...sentences.slice(0, startIndex)];
+    return Array.from({ length: repeat }, () => ordered).flat();
+  }
+
+  const sentence = activeSentence();
+  return sentence ? Array.from({ length: repeat }, () => sentence) : [];
 }
 
 function selectSentence(id) {
@@ -265,6 +286,12 @@ $("#sentenceForm").addEventListener("submit", (event) => {
 
 $("#repeatCount").addEventListener("change", (event) => {
   state.repeatCount = Math.min(9, Math.max(1, Number(event.target.value) || 1));
+  render();
+});
+
+$("#repeatScope").addEventListener("change", (event) => {
+  stopPlayback();
+  state.repeatScope = event.target.value === "project" ? "project" : "sentence";
   render();
 });
 

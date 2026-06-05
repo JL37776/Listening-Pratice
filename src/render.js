@@ -13,6 +13,7 @@ export function render() {
   $("#currentFolderName").textContent = activeFolder().name;
   $("#currentProjectName").textContent = activeProject().name;
   $("#repeatCount").value = state.repeatCount;
+  $("#repeatScope").value = state.repeatScope;
   $("#rateRange").value = state.rate;
   $("#rateLabel").textContent = `${Number(state.rate).toFixed(1)}x`;
   $("#engineSelect").value = state.engine;

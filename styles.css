@@ -293,6 +293,7 @@ button {
   padding: 0 10px;
 }
 
+.basic-controls select,
 .settings-grid select {
   width: 100%;
   height: 38px;

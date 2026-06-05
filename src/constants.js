@@ -7,6 +7,7 @@ export const DEFAULT_STATE = {
   activeProjectId: "morning",
   activeSentenceId: "s1",
   repeatCount: 3,
+  repeatScope: "sentence",
   rate: 0.9,
   engine: "kokoro",
   systemVoiceURI: "",
