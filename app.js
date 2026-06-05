@@ -71,19 +71,19 @@ async function prepareKokoroAudio(text, speed, showProgress = true) {
 
 function prefetchKokoroItem(item) {
   if (!item || state.engine !== "kokoro") return;
-  prepareKokoroAudio(getSpokenText(item.sentence), item.speed, false).catch((error) => {
+  prepareKokoroAudio(item.text, item.speed, false).catch((error) => {
     console.warn("Kokoro prefetch failed", error);
   });
 }
 
 async function playWithKokoro(item, { onStart, onEnd }) {
-  const audioBuffer = await prepareKokoroAudio(getSpokenText(item.sentence), item.speed, true);
+  const audioBuffer = await prepareKokoroAudio(item.text, item.speed, true);
   await playWavBuffer(audioBuffer, {
     onStart: () => {
       isSpeaking = true;
       $("#playIcon").textContent = "Stop";
       setMediaPlaybackState("playing");
-      setEngineStatus(`Playing Kokoro ${item.speed}x`);
+      setEngineStatus(formatPlayingStatus("Kokoro", item));
       onStart?.();
     },
     onEnd: () => {
@@ -103,14 +103,14 @@ async function playWithKokoro(item, { onStart, onEnd }) {
 }
 
 function playWithSystem(item, { onStart, onEnd }) {
-  speakWithSystem(getSpokenText(item.sentence), {
+  speakWithSystem(item.text, {
     rate: item.speed,
     voiceURI: state.systemVoiceURI,
     onStart: () => {
       isSpeaking = true;
       $("#playIcon").textContent = "Stop";
       setMediaPlaybackState("playing");
-      setEngineStatus(`Playing system voice ${item.speed}x`);
+      setEngineStatus(formatPlayingStatus("system voice", item));
       onStart?.();
     },
     onEnd: () => {
@@ -177,22 +177,21 @@ function buildPlaybackQueue(project, repeat) {
   if (state.repeatScope === "project") {
     const startIndex = Math.max(0, sentences.findIndex((sentence) => sentence.id === state.activeSentenceId));
     const ordered = [...sentences.slice(startIndex), ...sentences.slice(0, startIndex)];
-    return Array.from({ length: repeat }, () => ordered).flat().map((sentence) => ({
-      sentence,
-      speed: Number(state.rate) || 1,
-    }));
+    return Array.from({ length: repeat }, () => ordered)
+      .flat()
+      .flatMap((sentence) => makePlaybackItems(sentence, Number(state.rate) || 1));
   }
 
   if (state.repeatScope === "project-speed-pattern") {
     const startIndex = Math.max(0, sentences.findIndex((sentence) => sentence.id === state.activeSentenceId));
     const ordered = [...sentences.slice(startIndex), ...sentences.slice(0, startIndex)];
     const speeds = parseSpeedPattern();
-    return ordered.flatMap((sentence) => speeds.map((speed) => ({ sentence, speed })));
+    return ordered.flatMap((sentence) => speeds.flatMap((speed) => makePlaybackItems(sentence, speed)));
   }
 
   const sentence = activeSentence();
   return sentence
-    ? Array.from({ length: repeat }, () => ({ sentence, speed: Number(state.rate) || 1 }))
+    ? Array.from({ length: repeat }, () => makePlaybackItems(sentence, Number(state.rate) || 1)).flat()
     : [];
 }
 
@@ -210,6 +209,47 @@ function getSpokenText(sentence) {
     return `${sentence.text}\n\n${note}`;
   }
   return sentence.text;
+}
+
+function makePlaybackItems(sentence, speed) {
+  return splitSpokenText(getSpokenText(sentence)).map((text, partIndex, parts) => ({
+    sentence,
+    speed,
+    text,
+    partIndex,
+    partCount: parts.length,
+  }));
+}
+
+function splitSpokenText(text) {
+  const maxLength = 420;
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return [normalized];
+
+  const pieces = normalized
+    .replace(/\b(Situation|Task|Action|Result|Reflection):/g, "\n$1:")
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((piece) => piece.trim())
+    .filter(Boolean);
+
+  const chunks = [];
+  let current = "";
+  pieces.forEach((piece) => {
+    const next = current ? `${current} ${piece}` : piece;
+    if (next.length <= maxLength) {
+      current = next;
+      return;
+    }
+    if (current) chunks.push(current);
+    current = piece;
+  });
+  if (current) chunks.push(current);
+  return chunks.length ? chunks : [normalized];
+}
+
+function formatPlayingStatus(engineName, item) {
+  const part = item.partCount > 1 ? ` part ${item.partIndex + 1}/${item.partCount}` : "";
+  return `Playing ${engineName} ${item.speed}x${part}`;
 }
 
 function selectSentence(id) {

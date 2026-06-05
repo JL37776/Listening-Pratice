@@ -51,6 +51,7 @@ export async function loadKokoro(state, callbacks = {}) {
 
 export async function generateKokoroAudio(state, text, callbacks = {}, speed = Number(state.rate) || 1) {
   await loadKokoro(state, callbacks);
+  const { device } = getRuntimeOptions(state);
   return requestWorker(
     "generate",
     {
@@ -59,7 +60,7 @@ export async function generateKokoroAudio(state, text, callbacks = {}, speed = N
       speed,
     },
     callbacks,
-    WORKER_TIMEOUT_MS,
+    device === "webgpu" ? 180000 : WORKER_TIMEOUT_MS,
   );
 }
 
