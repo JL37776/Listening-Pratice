@@ -222,13 +222,13 @@ function makePlaybackItems(sentence, speed) {
 }
 
 function splitSpokenText(text) {
-  const maxLength = 180;
+  const maxLength = 120;
   const normalized = text.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) return [normalized];
 
   const pieces = normalized
     .replace(/\b(Situation|Task|Action|Result|Reflection):/g, "\n$1:")
-    .split(/(?<=[.!?])\s+|\n+/)
+    .split(/(?<=[.!?;:])\s+|,\s+|\n+/)
     .map((piece) => piece.trim())
     .filter(Boolean);
 
