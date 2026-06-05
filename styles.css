@@ -43,6 +43,14 @@ button {
   padding: max(14px, env(safe-area-inset-top)) 14px calc(74px + env(safe-area-inset-bottom));
 }
 
+:fullscreen {
+  background: var(--bg);
+}
+
+:fullscreen .app-shell {
+  width: min(100%, 430px);
+}
+
 .top-bar,
 .top-actions,
 .section-heading,
@@ -142,6 +150,7 @@ button {
 }
 
 .practice-card {
+  margin-top: 12px;
   padding: 14px;
 }
 

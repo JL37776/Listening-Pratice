@@ -5,6 +5,7 @@ import { closeInstallDialog, populateKokoroVoices, render, setEngineStatus, setR
 import { generateKokoroAudio, loadKokoro, resetKokoroWorker, runtimeKey } from "./src/kokoro-client.js";
 import { playWavBuffer, stopAudio, unlockAudio } from "./src/audio-player.js";
 import { populateSystemVoices, speakWithSystem, stopSystemSpeech } from "./src/system-speech.js";
+import { setMediaPlaybackState, setupMediaSession, updateMediaSession } from "./src/media-session.js";
 
 let isSpeaking = false;
 let editSentenceId = null;
@@ -17,6 +18,7 @@ function stopPlayback() {
   stopAudio();
   isSpeaking = false;
   $("#playIcon").textContent = "Play";
+  setMediaPlaybackState("none");
   setEngineStatus();
 }
 
@@ -69,47 +71,52 @@ async function prepareKokoroAudio(text, speed, showProgress = true) {
 
 function prefetchKokoroItem(item) {
   if (!item || state.engine !== "kokoro") return;
-  prepareKokoroAudio(item.sentence.text, item.speed, false).catch((error) => {
+  prepareKokoroAudio(getSpokenText(item.sentence), item.speed, false).catch((error) => {
     console.warn("Kokoro prefetch failed", error);
   });
 }
 
 async function playWithKokoro(item, { onStart, onEnd }) {
-  const audioBuffer = await prepareKokoroAudio(item.sentence.text, item.speed, true);
+  const audioBuffer = await prepareKokoroAudio(getSpokenText(item.sentence), item.speed, true);
   await playWavBuffer(audioBuffer, {
     onStart: () => {
       isSpeaking = true;
       $("#playIcon").textContent = "Stop";
+      setMediaPlaybackState("playing");
       setEngineStatus(`Playing Kokoro ${item.speed}x`);
       onStart?.();
     },
     onEnd: () => {
       isSpeaking = false;
       $("#playIcon").textContent = "Play";
+      setMediaPlaybackState("none");
       setEngineStatus("Kokoro Ready");
       onEnd?.();
     },
     onError: () => {
       isSpeaking = false;
       $("#playIcon").textContent = "Play";
+      setMediaPlaybackState("none");
       setEngineStatus("Audio playback failed");
     },
   });
 }
 
 function playWithSystem(item, { onStart, onEnd }) {
-  speakWithSystem(item.sentence.text, {
+  speakWithSystem(getSpokenText(item.sentence), {
     rate: item.speed,
     voiceURI: state.systemVoiceURI,
     onStart: () => {
       isSpeaking = true;
       $("#playIcon").textContent = "Stop";
+      setMediaPlaybackState("playing");
       setEngineStatus(`Playing system voice ${item.speed}x`);
       onStart?.();
     },
     onEnd: () => {
       isSpeaking = false;
       $("#playIcon").textContent = "Play";
+      setMediaPlaybackState("none");
       setEngineStatus();
       onEnd?.();
     },
@@ -151,6 +158,11 @@ async function speakCurrent() {
     const sentence = item.sentence;
     state.activeSentenceId = sentence.id;
     render();
+    updateMediaSession({
+      title: sentence.text,
+      artist: activeProject().name,
+      album: "Listening Practice",
+    });
     index += 1;
     speakItem(item, {
       onStart: () => prefetchKokoroItem(queue[index]),
@@ -192,6 +204,14 @@ function parseSpeedPattern() {
   return speeds.length ? speeds : [1, 0.8, 0.5];
 }
 
+function getSpokenText(sentence) {
+  const note = sentence.note?.trim() || "";
+  if (note.startsWith("Answer:")) {
+    return `${sentence.text}\n\n${note}`;
+  }
+  return sentence.text;
+}
+
 function selectSentence(id) {
   state.activeSentenceId = id;
   render();
@@ -210,6 +230,22 @@ function moveSentence(direction) {
   state.activeSentenceId = project.sentences[nextIndex].id;
   stopPlayback();
   render();
+}
+
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      return;
+    }
+    await document.documentElement.requestFullscreen();
+  } catch (error) {
+    console.warn("Fullscreen is not available", error);
+  }
+}
+
+function updateFullscreenButton() {
+  $("#fullscreenButton").textContent = document.fullscreenElement ? "Exit" : "Full";
 }
 
 function addSentence(text) {
@@ -311,6 +347,8 @@ $("#addSentence").addEventListener("click", openNewSentence);
 $("#playPause").addEventListener("click", speakCurrent);
 $("#prevSentence").addEventListener("click", () => moveSentence(-1));
 $("#nextSentence").addEventListener("click", () => moveSentence(1));
+$("#fullscreenButton").addEventListener("click", toggleFullscreen);
+document.addEventListener("fullscreenchange", updateFullscreenButton);
 $("#settingsButton").addEventListener("click", () => els.settingsDialog.showModal());
 document.querySelectorAll(".install-trigger").forEach((button) => {
   button.addEventListener("click", installKokoro);
@@ -440,6 +478,13 @@ if ("speechSynthesis" in window) {
   populateSystemVoices($("#systemVoiceSelect"), state.systemVoiceURI);
   window.speechSynthesis.onvoiceschanged = () => populateSystemVoices($("#systemVoiceSelect"), state.systemVoiceURI);
 }
+
+setupMediaSession({
+  play: speakCurrent,
+  stop: stopPlayback,
+  next: () => moveSentence(1),
+  previous: () => moveSentence(-1),
+});
 
 render();
 

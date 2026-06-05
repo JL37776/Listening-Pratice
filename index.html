@@ -17,6 +17,7 @@
           <h1>Listening Practice</h1>
         </div>
         <div class="top-actions">
+          <button class="icon-button" id="fullscreenButton" aria-label="Toggle fullscreen">Full</button>
           <button class="icon-button" id="settingsButton" aria-label="Open settings">Settings</button>
           <button class="icon-button primary" id="quickAdd" aria-label="Add sentence">Add</button>
         </div>
@@ -27,14 +28,6 @@
         <span>/</span>
         <strong id="currentProjectName">Morning Practice</strong>
       </button>
-
-      <section class="practice-card">
-        <div class="section-heading">
-          <h2>Sentences</h2>
-          <button class="text-button" id="addSentence">New Sentence</button>
-        </div>
-        <div class="sentence-list" id="sentenceList"></div>
-      </section>
 
       <section class="player-panel" aria-label="Playback controls">
         <div class="now-playing">
@@ -75,6 +68,14 @@
             <input id="speedPattern" inputmode="decimal" placeholder="1, 0.8, 0.5" />
           </label>
         </div>
+      </section>
+
+      <section class="practice-card">
+        <div class="section-heading">
+          <h2>Sentences</h2>
+          <button class="text-button" id="addSentence">New Sentence</button>
+        </div>
+        <div class="sentence-list" id="sentenceList"></div>
       </section>
 
       <form class="composer" id="sentenceForm">
