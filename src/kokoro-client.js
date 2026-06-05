@@ -4,6 +4,7 @@ let worker = null;
 let workerReadyKey = "";
 let requestId = 0;
 let activeRequest = null;
+const WORKER_VERSION = "20260605-tts-debug-2";
 
 export function getRuntimeOptions(state) {
   const requestedDevice = state.kokoroDevice || "auto";
@@ -66,7 +67,7 @@ export async function generateKokoroAudio(state, text, callbacks = {}, speed = N
 
 function ensureWorker(callbacks) {
   if (worker) return;
-  worker = new Worker("./kokoro-worker.js", { type: "module" });
+  worker = new Worker(`./kokoro-worker.js?v=${WORKER_VERSION}`, { type: "module" });
   worker.onmessage = (event) => handleWorkerMessage(event, callbacks);
   worker.onerror = (event) => {
     console.error(event);
@@ -80,6 +81,10 @@ function requestWorker(action, payload, callbacks, timeoutMs) {
   rejectActiveRequest(new Error("Superseded by a newer request"));
 
   return new Promise((resolve, reject) => {
+    callbacks?.onProgress?.({
+      percent: action === "generate" ? 5 : 2,
+      label: action === "generate" ? "Sending text to Kokoro worker..." : "Starting Kokoro worker...",
+    });
     const timer = window.setTimeout(() => {
       if (activeRequest?.id !== id) return;
       activeRequest = null;

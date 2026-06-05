@@ -49,7 +49,7 @@ async function prepareKokoroAudio(text, speed, showProgress = true) {
   let audioPromise = audioCache.get(cacheKey);
 
   if (!audioPromise) {
-    if (showProgress) setEngineStatus("Generating audio...");
+    if (showProgress) setEngineStatus("Requesting Kokoro worker...");
     audioPromise = generateKokoroAudio(
       state,
       text,

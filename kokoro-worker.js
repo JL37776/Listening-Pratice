@@ -59,6 +59,7 @@ function readyPayload() {
 
 async function generateAudio(id, payload) {
   if (!tts) throw new Error("Kokoro model is not loaded");
+  postMessage({ id, type: "progress", payload: { percent: 10, label: "Worker received generate request..." } });
   postMessage({ id, type: "progress", payload: { percent: 20, label: "Running Kokoro inference..." } });
   const audio = await tts.generate(payload.text, {
     voice: payload.voice,
